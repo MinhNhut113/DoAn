@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý Người Dùng - Admin</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI - Admin</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="users.html">Người Dùng</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="statistics.html">Thống Kê</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1 style="margin-bottom: 2rem;">Quản Lý Người Dùng</h1>
+        
+        <div class="card">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Tên Đăng Nhập</th>
+                        <th>Họ Tên</th>
+                        <th>Email</th>
+                        <th>Vai Trò</th>
+                        <th>Trạng Thái</th>
+                        <th>Thao Tác</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTable">
+                    <tr>
+                        <td colspan="7" style="text-align: center;">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                            </div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        if (!isAuthenticated()) {
+            redirectTo('../index.html');
+        }
+        
+        async function loadUsers() {
+            try {
+                const users = await adminAPI.getUsers();
+                renderUsers(users);
+            } catch (error) {
+                showAlert('Lỗi tải danh sách người dùng: ' + error.message, 'error');
+            }
+        }
+        
+        function renderUsers(users) {
+            const tbody = document.getElementById('usersTable');
+            
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Không có người dùng nào.</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = users.map(user => `
+                <tr>
+                    <td>${user.user_id}</td>
+                    <td>${user.username}</td>
+                    <td>${user.full_name}</td>
+                    <td>${user.email}</td>
+                    <td>${user.role}</td>
+                    <td>${user.is_active ? '<span style="color: var(--success-color);">Hoạt động</span>' : '<span style="color: var(--danger-color);">Khóa</span>'}</td>
+                    <td>
+                        ${user.is_active ? `
+                            <button class="btn btn-warning" onclick="deactivateUser(${user.user_id})">Khóa</button>
+                        ` : `
+                            <button class="btn btn-success" onclick="activateUser(${user.user_id})">Kích Hoạt</button>
+                        `}
+                        <button class="btn btn-danger" onclick="deleteUser(${user.user_id})">Xóa</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        async function deactivateUser(userId) {
+            if (!confirm('Bạn có chắc muốn khóa người dùng này?')) return;
+            
+            try {
+                await adminAPI.deactivateUser(userId);
+                showAlert('Đã khóa người dùng', 'success');
+                loadUsers();
+            } catch (error) {
+                showAlert('Lỗi: ' + error.message, 'error');
+            }
+        }
+        
+        async function activateUser(userId) {
+            try {
+                await adminAPI.activateUser(userId);
+                showAlert('Đã kích hoạt người dùng', 'success');
+                loadUsers();
+            } catch (error) {
+                showAlert('Lỗi: ' + error.message, 'error');
+            }
+        }
+        
+        async function deleteUser(userId) {
+            if (!confirm('Bạn có chắc muốn xóa người dùng này? Hành động này không thể hoàn tác!')) return;
+            
+            try {
+                await adminAPI.deleteUser(userId);
+                showAlert('Đã xóa người dùng', 'success');
+                loadUsers();
+            } catch (error) {
+                showAlert('Lỗi: ' + error.message, 'error');
+            }
+        }
+        
+        loadUsers();
+    </script>
+</body>
+</html>
+

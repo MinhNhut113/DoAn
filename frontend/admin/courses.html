@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý Khóa Học - Admin</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI - Admin</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="users.html">Người Dùng</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="statistics.html">Thống Kê</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h1>Quản Lý Khóa Học</h1>
+            <button class="btn btn-primary" onclick="showCreateModal()">Thêm Khóa Học</button>
+        </div>
+        
+        <div class="grid" id="coursesGrid">
+            <div class="loading">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create/Edit Modal -->
+    <div id="courseModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center;">
+        <div class="card" style="max-width: 500px; width: 90%; max-height: 90vh; overflow-y: auto;">
+            <div class="card-header" id="modalTitle">Thêm Khóa Học</div>
+            <form id="courseForm">
+                <div class="form-group">
+                    <label for="course_name">Tên Khóa Học</label>
+                    <input type="text" id="course_name" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Mô Tả</label>
+                    <textarea id="description" rows="4"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="thumbnail_url">URL Ảnh Bìa</label>
+                    <input type="url" id="thumbnail_url">
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <button type="submit" class="btn btn-primary">Lưu</button>
+                    <button type="button" class="btn btn-secondary" onclick="hideModal()">Hủy</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let editingCourseId = null;
+        
+        if (!isAuthenticated()) {
+            redirectTo('../index.html');
+        }
+        
+        async function loadCourses() {
+            try {
+                const courses = await coursesAPI.getAll(false);
+                renderCourses(courses);
+            } catch (error) {
+                showAlert('Lỗi tải khóa học: ' + error.message, 'error');
+            }
+        }
+        
+        function renderCourses(courses) {
+            const grid = document.getElementById('coursesGrid');
+            
+            if (courses.length === 0) {
+                grid.innerHTML = '<p>Chưa có khóa học nào.</p>';
+                return;
+            }
+            
+            grid.innerHTML = courses.map(course => `
+                <div class="course-card">
+                    ${course.thumbnail_url ? `<img src="${course.thumbnail_url}" alt="${course.course_name}">` : ''}
+                    <div class="course-card-body">
+                        <h3>${course.course_name}</h3>
+                        <p>${course.description ? (course.description.substring(0, 100) + '...') : ''}</p>
+                        <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                            <button class="btn btn-primary" onclick="editCourse(${course.course_id})">Sửa</button>
+                            <button class="btn btn-danger" onclick="deleteCourse(${course.course_id})">Xóa</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function showCreateModal() {
+            editingCourseId = null;
+            document.getElementById('modalTitle').textContent = 'Thêm Khóa Học';
+            document.getElementById('courseForm').reset();
+            document.getElementById('courseModal').classList.remove('hidden');
+        }
+        
+        function hideModal() {
+            document.getElementById('courseModal').classList.add('hidden');
+        }
+        
+        async function editCourse(courseId) {
+            try {
+                const course = await coursesAPI.getById(courseId);
+                editingCourseId = courseId;
+                document.getElementById('modalTitle').textContent = 'Sửa Khóa Học';
+                document.getElementById('course_name').value = course.course_name;
+                document.getElementById('description').value = course.description || '';
+                document.getElementById('thumbnail_url').value = course.thumbnail_url || '';
+                document.getElementById('courseModal').classList.remove('hidden');
+            } catch (error) {
+                showAlert('Lỗi: ' + error.message, 'error');
+            }
+        }
+        
+        document.getElementById('courseForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const courseData = {
+                course_name: document.getElementById('course_name').value,
+                description: document.getElementById('description').value,
+                thumbnail_url: document.getElementById('thumbnail_url').value
+            };
+            
+            try {
+                if (editingCourseId) {
+                    await adminAPI.updateCourse(editingCourseId, courseData);
+                    showAlert('Cập nhật thành công!', 'success');
+                } else {
+                    await adminAPI.createCourse(courseData);
+                    showAlert('Tạo khóa học thành công!', 'success');
+                }
+                hideModal();
+                loadCourses();
+            } catch (error) {
+                showAlert('Lỗi: ' + error.message, 'error');
+            }
+        });
+        
+        async function deleteCourse(courseId) {
+            if (!confirm('Bạn có chắc muốn xóa khóa học này?')) return;
+            
+            try {
+                await adminAPI.deleteCourse(courseId);
+                showAlert('Đã xóa khóa học', 'success');
+                loadCourses();
+            } catch (error) {
+                showAlert('Lỗi: ' + error.message, 'error');
+            }
+        }
+        
+        loadCourses();
+    </script>
+</body>
+</html>
+

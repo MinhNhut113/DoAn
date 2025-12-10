@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hồ Sơ - Sinh Viên</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="progress.html">Tiến Độ</a></li>
+                <li><a href="profile.html">Hồ Sơ</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1 style="margin-bottom: 2rem;">Hồ Sơ Cá Nhân</h1>
+        
+        <div class="card">
+            <div class="card-header">Thông Tin Cá Nhân</div>
+            <form id="profileForm">
+                <div class="form-group">
+                    <label for="full_name">Họ và Tên</label>
+                    <input type="text" id="full_name" name="full_name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="username">Tên đăng nhập</label>
+                    <input type="text" id="username" name="username" disabled>
+                </div>
+                
+                <div class="form-group">
+                    <label for="avatar_url">URL Ảnh Đại Diện</label>
+                    <input type="url" id="avatar_url" name="avatar_url">
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Cập Nhật</button>
+            </form>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Đổi Mật Khẩu</div>
+            <form id="passwordForm">
+                <div class="form-group">
+                    <label for="old_password">Mật khẩu hiện tại</label>
+                    <input type="password" id="old_password" name="old_password" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="new_password">Mật khẩu mới</label>
+                    <input type="password" id="new_password" name="new_password" required minlength="6">
+                </div>
+                
+                <div class="form-group">
+                    <label for="confirm_new_password">Xác nhận mật khẩu mới</label>
+                    <input type="password" id="confirm_new_password" name="confirm_new_password" required>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Đổi Mật Khẩu</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        if (!isAuthenticated()) {
+            redirectTo('../index.html');
+        }
+        
+        async function loadProfile() {
+            try {
+                const user = await authAPI.getProfile();
+                document.getElementById('full_name').value = user.full_name || '';
+                document.getElementById('email').value = user.email || '';
+                document.getElementById('username').value = user.username || '';
+                document.getElementById('avatar_url').value = user.avatar_url || '';
+            } catch (error) {
+                showAlert('Lỗi tải thông tin: ' + error.message, 'error');
+            }
+        }
+        
+        document.getElementById('profileForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const userData = {
+                full_name: document.getElementById('full_name').value,
+                email: document.getElementById('email').value,
+                avatar_url: document.getElementById('avatar_url').value
+            };
+            
+            try {
+                await authAPI.updateProfile(userData);
+                showAlert('Cập nhật thành công!', 'success');
+                loadProfile();
+            } catch (error) {
+                showAlert('Lỗi cập nhật: ' + error.message, 'error');
+            }
+        });
+        
+        document.getElementById('passwordForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const oldPassword = document.getElementById('old_password').value;
+            const newPassword = document.getElementById('new_password').value;
+            const confirmPassword = document.getElementById('confirm_new_password').value;
+            
+            if (newPassword !== confirmPassword) {
+                showAlert('Mật khẩu xác nhận không khớp', 'error');
+                return;
+            }
+            
+            try {
+                await authAPI.changePassword(oldPassword, newPassword);
+                showAlert('Đổi mật khẩu thành công!', 'success');
+                document.getElementById('passwordForm').reset();
+            } catch (error) {
+                showAlert('Lỗi đổi mật khẩu: ' + error.message, 'error');
+            }
+        });
+        
+        loadProfile();
+    </script>
+</body>
+</html>
+

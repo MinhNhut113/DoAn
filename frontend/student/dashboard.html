@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Sinh Viên</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="progress.html">Tiến Độ</a></li>
+                <li><a href="profile.html">Hồ Sơ</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1 style="margin-bottom: 2rem;">Dashboard</h1>
+        
+        <!-- Stats -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-value" id="totalCourses">-</div>
+                <div class="stat-label">Khóa Học</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="completedLessons">-</div>
+                <div class="stat-label">Bài Học Hoàn Thành</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="avgScore">-</div>
+                <div class="stat-label">Điểm Trung Bình</div>
+            </div>
+        </div>
+        
+        <!-- AI Recommendations -->
+        <div class="card">
+            <div class="card-header">🎯 Gợi Ý từ AI</div>
+            <div id="recommendations">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>Đang tải gợi ý...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Courses -->
+        <div class="card">
+            <div class="card-header">Khóa Học Của Tôi</div>
+            <div class="grid" id="coursesGrid">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Quiz Results -->
+        <div class="card">
+            <div class="card-header">Kết Quả Kiểm Tra Gần Đây</div>
+            <div id="recentQuizzes">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chatbot Floating Button & Modal -->
+    <div id="chatbotContainer" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999;">
+        <div id="chatModal" style="display: none; width: 400px; height: 500px; background: white; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); flex-direction: column; overflow: hidden;">
+            <div style="background: var(--primary-color); color: white; padding: 15px; display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: bold;">🤖 AI Chatbot</span>
+                <button onclick="toggleChat()" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer;">✕</button>
+            </div>
+            <div id="chatMessages" style="flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px;"></div>
+            <div style="padding: 15px; border-top: 1px solid #e5e7eb; display: flex; gap: 10px;">
+                <input type="text" id="chatInput" placeholder="Đặt câu hỏi..." style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 14px;">
+                <button onclick="sendChatMessage()" style="padding: 8px 12px; background: var(--primary-color); color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">Gửi</button>
+            </div>
+        </div>
+        <button id="chatToggle" onclick="toggleChat()" style="width: 60px; height: 60px; border-radius: 50%; background: var(--primary-color); color: white; border: none; cursor: pointer; font-size: 24px; box-shadow: 0 4px 8px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; font-weight: bold;">💬</button>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        // Check authentication
+        if (!isAuthenticated()) {
+            redirectTo('../index.html');
+        }
+        
+        async function loadDashboard() {
+            try {
+                // Load dashboard data
+                const dashboardData = await progressAPI.getDashboard();
+                
+                // Update stats
+                document.getElementById('totalCourses').textContent = dashboardData.courses_progress.length;
+                document.getElementById('completedLessons').textContent = dashboardData.total_lessons_completed;
+                
+                // Load courses
+                const courses = await coursesAPI.getAll(true);
+                renderCourses(courses.slice(0, 6));
+                
+                // Render recent quizzes
+                renderRecentQuizzes(dashboardData.recent_quizzes);
+                
+                // Load AI recommendations
+                loadRecommendations();
+            } catch (error) {
+                showAlert('Lỗi tải dashboard: ' + error.message, 'error');
+            }
+        }
+        
+        function renderCourses(courses) {
+            const grid = document.getElementById('coursesGrid');
+            
+            if (courses.length === 0) {
+                grid.innerHTML = '<p>Bạn chưa đăng ký khóa học nào. <a href="courses.html">Xem khóa học</a></p>';
+                return;
+            }
+            
+            grid.innerHTML = courses.map(course => `
+                <div class="course-card">
+                    <div class="course-card-body">
+                        <h3>${course.course_name}</h3>
+                        <p>${course.description || ''}</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${course.progress_percentage || 0}%"></div>
+                        </div>
+                        <p style="text-align: center; margin-top: 0.5rem;">${(course.progress_percentage || 0).toFixed(1)}%</p>
+                        <a href="course-detail.html?id=${course.course_id}" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Xem Chi Tiết</a>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function renderRecentQuizzes(quizzes) {
+            const container = document.getElementById('recentQuizzes');
+            
+            if (quizzes.length === 0) {
+                container.innerHTML = '<p>Chưa có kết quả kiểm tra nào.</p>';
+                return;
+            }
+            
+            container.innerHTML = `
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Bài Kiểm Tra</th>
+                            <th>Điểm</th>
+                            <th>Kết Quả</th>
+                            <th>Ngày Làm</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${quizzes.map(quiz => `
+                            <tr>
+                                <td>Quiz #${quiz.quiz_id}</td>
+                                <td>${quiz.score.toFixed(1)}%</td>
+                                <td>${quiz.score >= 60 ? '<span style="color: var(--success-color);">Đạt</span>' : '<span style="color: var(--danger-color);">Chưa đạt</span>'}</td>
+                                <td>${formatDate(quiz.submitted_at)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        async function loadRecommendations() {
+            try {
+                await aiAPI.generate();
+                const recommendations = await aiAPI.getRecommendations(null, false);
+                
+                const container = document.getElementById('recommendations');
+                
+                if (recommendations.length === 0) {
+                    container.innerHTML = '<p>Chưa có gợi ý nào. Hãy hoàn thành một số bài học để nhận gợi ý từ AI!</p>';
+                    return;
+                }
+                
+                container.innerHTML = recommendations.slice(0, 5).map(rec => `
+                    <div style="padding: 1rem; margin-bottom: 1rem; background: var(--light-color); border-radius: 5px;">
+                        <strong>${rec.content?.title || 'Nội dung được đề xuất'}</strong>
+                        <p style="margin-top: 0.5rem; color: #6b7280;">${rec.reason}</p>
+                        ${rec.content_type === 'lesson' ? `<a href="lesson.html?id=${rec.content_id}" class="btn btn-primary" style="margin-top: 0.5rem;">Xem Bài Học</a>` : ''}
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading recommendations:', error);
+            }
+        }
+        
+        loadDashboard();
+        
+        // Chatbot functions
+        function toggleChat() {
+            const modal = document.getElementById('chatModal');
+            const toggle = document.getElementById('chatToggle');
+            if (modal.style.display === 'none') {
+                modal.style.display = 'flex';
+                toggle.style.display = 'none';
+            } else {
+                modal.style.display = 'none';
+                toggle.style.display = 'flex';
+            }
+        }
+        
+        async function sendChatMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            if (!message) return;
+            
+            input.value = '';
+            const messagesDiv = document.getElementById('chatMessages');
+            
+            // Display user message
+            messagesDiv.innerHTML += `<div style="text-align: right; margin-bottom: 10px;"><div style="background: var(--primary-color); color: white; padding: 8px 12px; border-radius: 10px; display: inline-block; max-width: 80%;">${escapeHtml(message)}</div></div>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            try {
+                const response = await aiAPI.askQuestion(message);
+                const botResponse = response.response || 'Xin lỗi, tôi không thể trả lời câu hỏi này.';
+                messagesDiv.innerHTML += `<div style="text-align: left; margin-bottom: 10px;"><div style="background: #f3f4f6; padding: 8px 12px; border-radius: 10px; display: inline-block; max-width: 80%;">${escapeHtml(botResponse)}</div></div>`;
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            } catch (error) {
+                console.error('Chat error:', error);
+                messagesDiv.innerHTML += `<div style="text-align: left; margin-bottom: 10px;"><div style="background: #fee2e2; padding: 8px 12px; border-radius: 10px; color: #dc2626;">Lỗi: ${escapeHtml(error.message)}</div></div>`;
+            }
+        }
+        
+        function escapeHtml(text) {
+            const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'};
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+        
+        // Allow Enter key to send message
+        document.getElementById('chatInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendChatMessage();
+        });
+    </script>
+</body>
+</html>
+

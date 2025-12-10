@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng Nhập - Hệ Thống Học Trực Tuyến</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div style="max-width: 400px; margin: 5rem auto;">
+            <div class="card">
+                <div class="card-header">Đăng Nhập</div>
+                
+                <form id="loginForm">
+                    <div class="form-group">
+                        <label for="username">Tên đăng nhập</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="password">Mật khẩu</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Đăng Nhập</button>
+                </form>
+                
+                <div style="margin-top: 1.5rem; text-align: center;">
+                    <p>Chưa có tài khoản? <a href="register.html" style="color: var(--primary-color);">Đăng ký ngay</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load api.js TRƯỚC (vì nó định nghĩa hết các hàm cần thiết) -->
+    <script src="js/api.js"></script>
+    
+    <script>
+        // Hiển thị API URL để debug
+        console.log('🔗 Current API Base URL:', API_BASE_URL);
+        console.log('📍 Current location:', window.location.href);
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = e.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Đang đăng nhập...';
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                console.log('🔐 Attempting login for user:', username);
+                console.log('🔗 API URL:', API_BASE_URL);
+                
+                const response = await authAPI.login(username, password);
+                
+                console.log('✅ Login successful');
+                localStorage.setItem('auth_token', response.access_token);
+                localStorage.setItem('user_data', JSON.stringify(response.user));
+                
+                if (response.user.role === 'admin') {
+                    window.location.href = 'admin/dashboard.html';
+                } else {
+                    window.location.href = 'student/dashboard.html';
+                }
+            } catch (error) {
+                console.error('❌ Login error:', error);
+                let errorMessage = 'Đăng nhập thất bại: ';
+                
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {
+                    errorMessage += 'Không thể kết nối đến server. Đảm bảo Backend đang chạy tại ' + API_BASE_URL.replace('/api', '');
+                } else if (error.message.includes('Invalid credentials')) {
+                    errorMessage += 'Tên đăng nhập hoặc mật khẩu không đúng';
+                } else {
+                    errorMessage += error.message;
+                }
+                
+                showAlert(errorMessage, 'error');
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+            }
+        });
+        
+        // Check if already logged in
+        if (isAuthenticated()) {
+            const userData = JSON.parse(localStorage.getItem('user_data') || '{}');
+            if (userData.role === 'admin') {
+                window.location.href = 'admin/dashboard.html';
+            } else {
+                window.location.href = 'student/dashboard.html';
+            }
+        }
+    </script>
+</body>
+</html>
+

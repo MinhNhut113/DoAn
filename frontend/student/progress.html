@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Theo Dõi Tiến Độ - Sinh Viên</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="progress.html">Tiến Độ</a></li>
+                <li><a href="profile.html">Hồ Sơ</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1 style="margin-bottom: 2rem;">Theo Dõi Tiến Độ</h1>
+        
+        <div class="form-group">
+            <label>Chọn Khóa Học</label>
+            <select id="courseSelect" onchange="loadProgress()">
+                <option value="">Tất Cả Khóa Học</option>
+            </select>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Tiến Độ Khóa Học</div>
+            <div id="courseProgress">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Phân Tích Điểm Mạnh & Điểm Yếu</div>
+            <div style="position: relative; height: 400px;">
+                <canvas id="analyticsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let analyticsChart = null;
+        
+        if (!isAuthenticated()) {
+            redirectTo('../index.html');
+        }
+        
+        async function loadCourses() {
+            try {
+                const courses = await coursesAPI.getAll(true);
+                const select = document.getElementById('courseSelect');
+                
+                courses.forEach(course => {
+                    const option = document.createElement('option');
+                    option.value = course.course_id;
+                    option.textContent = course.course_name;
+                    select.appendChild(option);
+                });
+                
+                loadProgress();
+            } catch (error) {
+                showAlert('Lỗi tải khóa học: ' + error.message, 'error');
+            }
+        }
+        
+        async function loadProgress() {
+            const courseId = document.getElementById('courseSelect').value;
+            
+            try {
+                if (courseId) {
+                    const progress = await progressAPI.getCourseProgress(courseId);
+                    renderCourseProgress(progress);
+                    
+                    const analytics = await progressAPI.getAnalytics(courseId);
+                    renderAnalytics(analytics);
+                } else {
+                    // Show overall progress
+                    const dashboard = await progressAPI.getDashboard();
+                    renderOverallProgress(dashboard);
+                    
+                    const analytics = await progressAPI.getAnalytics();
+                    renderAnalytics(analytics);
+                }
+            } catch (error) {
+                showAlert('Lỗi tải tiến độ: ' + error.message, 'error');
+            }
+        }
+        
+        function renderCourseProgress(progress) {
+            const container = document.getElementById('courseProgress');
+            
+            container.innerHTML = `
+                <h3>Tiến Độ: ${progress.progress_percentage.toFixed(1)}%</h3>
+                <div class="progress-bar" style="margin: 1rem 0;">
+                    <div class="progress-fill" style="width: ${progress.progress_percentage}%"></div>
+                </div>
+                <p><strong>Tổng bài học:</strong> ${progress.total_lessons}</p>
+                <p><strong>Đã hoàn thành:</strong> ${progress.completed_lessons}</p>
+                <p><strong>Thời gian học:</strong> ${progress.total_time_spent_minutes} phút</p>
+                
+                <h4 style="margin-top: 2rem;">Chi Tiết Bài Học</h4>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>STT</th>
+                            <th>Tên Bài Học</th>
+                            <th>Trạng Thái</th>
+                            <th>Thời Gian</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${progress.lessons.map((lesson, index) => `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>${lesson.lesson_title}</td>
+                                <td>${lesson.is_completed ? '<span style="color: var(--success-color);">✓ Hoàn thành</span>' : 'Chưa hoàn thành'}</td>
+                                <td>${lesson.time_spent_minutes} phút</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        function renderOverallProgress(dashboard) {
+            const container = document.getElementById('courseProgress');
+            
+            container.innerHTML = `
+                <h3>Tổng Quan Tiến Độ</h3>
+                <p><strong>Tổng khóa học:</strong> ${dashboard.courses_progress.length}</p>
+                <p><strong>Bài học đã hoàn thành:</strong> ${dashboard.total_lessons_completed}</p>
+                
+                <h4 style="margin-top: 2rem;">Tiến Độ Từng Khóa Học</h4>
+                ${dashboard.courses_progress.map(cp => `
+                    <div style="margin-bottom: 1rem;">
+                        <p><strong>Khóa học #${cp.course_id}:</strong> ${cp.progress_percentage.toFixed(1)}%</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${cp.progress_percentage}%"></div>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+        }
+        
+        function renderAnalytics(analytics) {
+            const ctx = document.getElementById('analyticsChart').getContext('2d');
+            
+            if (analyticsChart) {
+                analyticsChart.destroy();
+            }
+            
+            if (!analytics.analytics || analytics.analytics.length === 0) {
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                ctx.font = '16px Arial';
+                ctx.fillText('Chưa có dữ liệu phân tích', 50, 200);
+                return;
+            }
+            
+            const topics = analytics.analytics.map(a => a.topic_name);
+            const strengths = analytics.analytics.map(a => a.strength_score);
+            const weaknesses = analytics.analytics.map(a => a.weakness_score);
+            
+            analyticsChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topics,
+                    datasets: [
+                        {
+                            label: 'Điểm Mạnh (%)',
+                            data: strengths,
+                            backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                            borderColor: 'rgba(16, 185, 129, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Điểm Yếu (%)',
+                            data: weaknesses,
+                            backgroundColor: 'rgba(239, 68, 68, 0.6)',
+                            borderColor: 'rgba(239, 68, 68, 1)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+        
+        loadCourses();
+    </script>
+</body>
+</html>
+

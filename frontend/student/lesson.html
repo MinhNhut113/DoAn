@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bài Học</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card" id="lessonContent">
+            <div class="loading">
+                <div class="spinner"></div>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 2rem;">
+            <button class="btn btn-success" id="completeBtn" onclick="completeLesson()" style="display: none;">Đánh Dấu Hoàn Thành</button>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const lessonId = urlParams.get('id');
+        
+        let lesson = null;
+        
+        if (!isAuthenticated()) {
+            redirectTo('../index.html');
+        }
+        
+        async function loadLesson() {
+            try {
+                lesson = await lessonsAPI.getById(lessonId);
+                renderLesson();
+            } catch (error) {
+                showAlert('Lỗi tải bài học: ' + error.message, 'error');
+            }
+        }
+        
+        function renderLesson() {
+            const container = document.getElementById('lessonContent');
+            
+            container.innerHTML = `
+                <h1>${lesson.lesson_title}</h1>
+                ${lesson.video_url ? `
+                    <div style="margin: 2rem 0;">
+                        <video controls style="width: 100%; max-width: 800px; border-radius: 10px;">
+                            <source src="${lesson.video_url}" type="video/mp4">
+                            Trình duyệt không hỗ trợ video.
+                        </video>
+                    </div>
+                ` : ''}
+                <div style="margin-top: 2rem; line-height: 1.8;">
+                    ${lesson.lesson_content ? lesson.lesson_content.replace(/\n/g, '<br>') : 'Nội dung bài học sẽ được cập nhật sớm.'}
+                </div>
+                ${lesson.is_completed ? `
+                    <div class="alert alert-success" style="margin-top: 2rem;">
+                        ✓ Bạn đã hoàn thành bài học này!
+                    </div>
+                ` : ''}
+            `;
+            
+            if (!lesson.is_completed) {
+                document.getElementById('completeBtn').style.display = 'inline-block';
+            }
+        }
+        
+        async function completeLesson() {
+            try {
+                await lessonsAPI.complete(lessonId);
+                showAlert('Đã đánh dấu hoàn thành!', 'success');
+                document.getElementById('completeBtn').style.display = 'none';
+                loadLesson();
+            } catch (error) {
+                showAlert('Lỗi: ' + error.message, 'error');
+            }
+        }
+        
+        loadLesson();
+    </script>
+</body>
+</html>
+

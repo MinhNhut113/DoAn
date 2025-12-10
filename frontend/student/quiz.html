@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Làm Bài Kiểm Tra</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card">
+            <div class="card-header" id="quizTitle">Bài Kiểm Tra</div>
+            
+            <div id="quizTimer" style="text-align: right; margin-bottom: 1rem; font-weight: bold; color: var(--primary-color);"></div>
+            
+            <div id="quizContent">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+            
+            <div style="text-align: center; margin-top: 2rem;">
+                <button class="btn btn-primary" id="submitBtn" onclick="submitQuiz()" disabled>Nộp Bài</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const quizId = urlParams.get('id');
+        
+        let quiz = null;
+        let answers = {};
+        let startTime = Date.now();
+        let timerInterval = null;
+        
+        if (!isAuthenticated()) {
+            redirectTo('../index.html');
+        }
+        
+        async function loadQuiz() {
+            try {
+                quiz = await quizzesAPI.getById(quizId);
+                document.getElementById('quizTitle').textContent = quiz.quiz_name;
+                
+                renderQuiz();
+                
+                // Start timer if time limit exists
+                if (quiz.time_limit_minutes) {
+                    startTimer(quiz.time_limit_minutes);
+                }
+            } catch (error) {
+                showAlert('Lỗi tải bài kiểm tra: ' + error.message, 'error');
+            }
+        }
+        
+        function renderQuiz() {
+            const container = document.getElementById('quizContent');
+            
+            if (!quiz.questions || quiz.questions.length === 0) {
+                container.innerHTML = '<p>Không có câu hỏi nào trong bài kiểm tra này.</p>';
+                return;
+            }
+            
+            container.innerHTML = quiz.questions.map((q, index) => {
+                const options = JSON.parse(q.options || '[]');
+                
+                return `
+                    <div class="quiz-question">
+                        <h3>Câu ${index + 1}: ${q.question_text}</h3>
+                        <ul class="quiz-options">
+                            ${options.map((option, optIndex) => `
+                                <li class="quiz-option" onclick="selectAnswer(${q.question_id}, ${optIndex})" id="opt_${q.question_id}_${optIndex}">
+                                    ${String.fromCharCode(65 + optIndex)}. ${option}
+                                </li>
+                            `).join('')}
+                        </ul>
+                    </div>
+                `;
+            }).join('');
+            
+            updateSubmitButton();
+        }
+        
+        function selectAnswer(questionId, answerIndex) {
+            answers[questionId] = answerIndex;
+            
+            // Update UI
+            const options = document.querySelectorAll(`[id^="opt_${questionId}_"]`);
+            options.forEach(opt => opt.classList.remove('selected'));
+            document.getElementById(`opt_${questionId}_${answerIndex}`).classList.add('selected');
+            
+            updateSubmitButton();
+        }
+        
+        function updateSubmitButton() {
+            const totalQuestions = quiz.questions.length;
+            const answeredQuestions = Object.keys(answers).length;
+            
+            document.getElementById('submitBtn').disabled = answeredQuestions < totalQuestions;
+            document.getElementById('submitBtn').textContent = 
+                `Nộp Bài (${answeredQuestions}/${totalQuestions})`;
+        }
+        
+        function startTimer(minutes) {
+            let timeLeft = minutes * 60;
+            
+            timerInterval = setInterval(() => {
+                const mins = Math.floor(timeLeft / 60);
+                const secs = timeLeft % 60;
+                document.getElementById('quizTimer').textContent = 
+                    `Thời gian còn lại: ${mins}:${secs.toString().padStart(2, '0')}`;
+                
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    submitQuiz();
+                }
+                
+                timeLeft--;
+            }, 1000);
+        }
+        
+        async function submitQuiz() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+            }
+            
+            const timeTaken = Math.floor((Date.now() - startTime) / 60000);
+            
+            const answerArray = quiz.questions.map(q => ({
+                question_id: q.question_id,
+                selected_answer: answers[q.question_id] || null,
+                time_spent_seconds: 0
+            }));
+            
+            try {
+                const result = await quizzesAPI.submit(quizId, answerArray, timeTaken);
+                
+                // Show results
+                showQuizResults(result.result);
+            } catch (error) {
+                showAlert('Lỗi nộp bài: ' + error.message, 'error');
+            }
+        }
+        
+        function showQuizResults(result) {
+            const container = document.getElementById('quizContent');
+            
+            container.innerHTML = `
+                <div class="alert ${result.passed ? 'alert-success' : 'alert-error'}">
+                    <h2>Kết Quả Bài Kiểm Tra</h2>
+                    <p><strong>Điểm:</strong> ${result.score.toFixed(1)}%</p>
+                    <p><strong>Số câu đúng:</strong> ${result.correct_answers}/${result.total_questions}</p>
+                    <p><strong>Kết quả:</strong> ${result.passed ? 'Đạt' : 'Chưa đạt'}</p>
+                </div>
+                
+                <h3 style="margin-top: 2rem;">Chi Tiết Câu Trả Lời</h3>
+                ${result.answers.map((ans, index) => {
+                    const question = quiz.questions.find(q => q.question_id === ans.question_id);
+                    const options = JSON.parse(question.options || '[]');
+                    
+                    return `
+                        <div class="quiz-question">
+                            <h4>Câu ${index + 1}: ${question.question_text}</h4>
+                            <ul class="quiz-options">
+                                ${options.map((option, optIndex) => {
+                                    let className = 'quiz-option';
+                                    if (optIndex === ans.correct_answer) className += ' correct';
+                                    if (optIndex === ans.selected_answer && !ans.is_correct) className += ' incorrect';
+                                    
+                                    return `
+                                        <li class="${className}">
+                                            ${String.fromCharCode(65 + optIndex)}. ${option}
+                                            ${optIndex === ans.correct_answer ? ' ✓ Đáp án đúng' : ''}
+                                            ${optIndex === ans.selected_answer && !ans.is_correct ? ' ✗ Đáp án bạn chọn' : ''}
+                                        </li>
+                                    `;
+                                }).join('')}
+                            </ul>
+                            ${ans.explanation ? `<p style="margin-top: 1rem; color: #6b7280;"><strong>Giải thích:</strong> ${ans.explanation}</p>` : ''}
+                        </div>
+                    `;
+                }).join('')}
+                
+                <div style="text-align: center; margin-top: 2rem;">
+                    <a href="dashboard.html" class="btn btn-primary">Về Dashboard</a>
+                </div>
+            `;
+            
+            document.getElementById('submitBtn').style.display = 'none';
+        }
+        
+        loadQuiz();
+    </script>
+</body>
+</html>
+

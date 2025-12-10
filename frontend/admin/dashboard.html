@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Admin</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI - Admin</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="users.html">Người Dùng</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="statistics.html">Thống Kê</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1 style="margin-bottom: 2rem;">Dashboard Quản Trị</h1>
+        
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-value" id="totalUsers">-</div>
+                <div class="stat-label">Tổng Người Dùng</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalCourses">-</div>
+                <div class="stat-label">Tổng Khóa Học</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="totalEnrollments">-</div>
+                <div class="stat-label">Tổng Đăng Ký</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="completionRate">-</div>
+                <div class="stat-label">Tỷ Lệ Hoàn Thành</div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Thống Kê Chi Tiết</div>
+            <div id="statisticsDetails">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load api.js -->
+    <script src="../js/api.js"></script>
+    <script>
+        console.log('[ADMIN] Page loaded');
+        console.log('[ADMIN] Checking authentication...');
+        console.log('[ADMIN] Auth Token:', localStorage.getItem('auth_token') ? 'Present' : 'Missing');
+        
+        if (!isAuthenticated()) {
+            console.log('[ADMIN] Not authenticated, redirecting to login');
+            redirectTo('../index.html');
+        }
+        
+        async function loadStatistics() {
+            try {
+                console.log('[ADMIN] Loading statistics...');
+                const stats = await adminAPI.getStatistics();
+                console.log('[ADMIN] Statistics loaded:', stats);
+                
+                document.getElementById('totalUsers').textContent = stats.users.total;
+                document.getElementById('totalCourses').textContent = stats.courses.total;
+                document.getElementById('totalEnrollments').textContent = stats.enrollments;
+                document.getElementById('completionRate').textContent = stats.completion.average_rate.toFixed(1) + '%';
+                
+                const details = document.getElementById('statisticsDetails');
+                details.innerHTML = `
+                    <h3>Người Dùng</h3>
+                    <p><strong>Tổng:</strong> ${stats.users.total}</p>
+                    <p><strong>Đang hoạt động:</strong> ${stats.users.active}</p>
+                    
+                    <h3 style="margin-top: 2rem;">Khóa Học</h3>
+                    <p><strong>Tổng:</strong> ${stats.courses.total}</p>
+                    <p><strong>Đang hoạt động:</strong> ${stats.courses.active}</p>
+                    
+                    <h3 style="margin-top: 2rem;">Tỷ Lệ Hoàn Thành</h3>
+                    <p><strong>Trung bình:</strong> ${stats.completion.average_rate.toFixed(1)}%</p>
+                `;
+            } catch (error) {
+                console.error('[ADMIN] Error loading statistics:', error);
+                document.getElementById('statisticsDetails').innerHTML = `
+                    <div style="color: red; padding: 20px;">
+                        <p>❌ Lỗi tải thống kê:</p>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        loadStatistics();
+    </script>
+</body>
+</html>
+

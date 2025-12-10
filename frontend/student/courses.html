@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Khóa Học - Sinh Viên</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="progress.html">Tiến Độ</a></li>
+                <li><a href="profile.html">Hồ Sơ</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+            <h1>Khóa Học</h1>
+            <div>
+                <button class="btn btn-secondary" onclick="toggleView()" id="toggleBtn">Xem Tất Cả</button>
+            </div>
+        </div>
+        
+        <div class="grid" id="coursesGrid">
+            <div class="loading">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        let showingEnrolledOnly = true;
+        
+        if (!isAuthenticated()) {
+            redirectTo('../index.html');
+        }
+        
+        async function loadCourses(enrolledOnly = true) {
+            try {
+                const courses = await coursesAPI.getAll(enrolledOnly);
+                renderCourses(courses);
+            } catch (error) {
+                showAlert('Lỗi tải khóa học: ' + error.message, 'error');
+            }
+        }
+        
+        function renderCourses(courses) {
+            const grid = document.getElementById('coursesGrid');
+            
+            if (courses.length === 0) {
+                grid.innerHTML = '<p>Không có khóa học nào.</p>';
+                return;
+            }
+            
+            grid.innerHTML = courses.map(course => `
+                <div class="course-card">
+                    ${course.thumbnail_url ? `<img src="${course.thumbnail_url}" alt="${course.course_name}">` : ''}
+                    <div class="course-card-body">
+                        <h3>${course.course_name}</h3>
+                        <p>${course.description ? (course.description.substring(0, 100) + '...') : ''}</p>
+                        ${course.is_enrolled ? `
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${course.progress_percentage || 0}%"></div>
+                            </div>
+                            <p style="text-align: center; margin-top: 0.5rem;">${(course.progress_percentage || 0).toFixed(1)}%</p>
+                            <a href="course-detail.html?id=${course.course_id}" class="btn btn-primary" style="width: 100%; margin-top: 1rem;">Tiếp Tục Học</a>
+                        ` : `
+                            <button class="btn btn-success" style="width: 100%; margin-top: 1rem;" onclick="enrollCourse(${course.course_id})">Đăng Ký</button>
+                        `}
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        async function enrollCourse(courseId) {
+            try {
+                await coursesAPI.enroll(courseId);
+                showAlert('Đăng ký khóa học thành công!', 'success');
+                loadCourses(showingEnrolledOnly);
+            } catch (error) {
+                showAlert('Lỗi đăng ký: ' + error.message, 'error');
+            }
+        }
+        
+        function toggleView() {
+            showingEnrolledOnly = !showingEnrolledOnly;
+            document.getElementById('toggleBtn').textContent = showingEnrolledOnly ? 'Xem Tất Cả' : 'Chỉ Xem Đã Đăng Ký';
+            loadCourses(showingEnrolledOnly);
+        }
+        
+        loadCourses(showingEnrolledOnly);
+    </script>
+</body>
+</html>
+

@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chi Tiết Khóa Học</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="progress.html">Tiến Độ</a></li>
+                <li><a href="profile.html">Hồ Sơ</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="card" id="courseInfo">
+            <div class="loading">
+                <div class="spinner"></div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Danh Sách Bài Học</div>
+            <div id="lessonsList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">Bài Kiểm Tra</div>
+            <div id="quizzesList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const courseId = urlParams.get('id');
+        
+        if (!isAuthenticated()) {
+            redirectTo('../index.html');
+        }
+        
+        async function loadCourseDetail() {
+            try {
+                const course = await coursesAPI.getById(courseId);
+                renderCourseInfo(course);
+                
+                const lessons = await lessonsAPI.getByCourse(courseId);
+                renderLessons(lessons);
+                
+                const quizzes = await quizzesAPI.getAll(courseId);
+                renderQuizzes(quizzes);
+            } catch (error) {
+                showAlert('Lỗi tải khóa học: ' + error.message, 'error');
+            }
+        }
+        
+        function renderCourseInfo(course) {
+            const container = document.getElementById('courseInfo');
+            
+            container.innerHTML = `
+                <h1>${course.course_name}</h1>
+                <p style="margin: 1rem 0;">${course.description || ''}</p>
+                ${course.is_enrolled ? `
+                    <div class="progress-bar" style="margin: 1rem 0;">
+                        <div class="progress-fill" style="width: ${course.progress_percentage || 0}%"></div>
+                    </div>
+                    <p>Tiến độ: ${(course.progress_percentage || 0).toFixed(1)}%</p>
+                ` : `
+                    <button class="btn btn-success" onclick="enrollCourse()">Đăng Ký Khóa Học</button>
+                `}
+            `;
+        }
+        
+        function renderLessons(lessons) {
+            const container = document.getElementById('lessonsList');
+            
+            if (lessons.length === 0) {
+                container.innerHTML = '<p>Chưa có bài học nào.</p>';
+                return;
+            }
+            
+            container.innerHTML = `
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>STT</th>
+                            <th>Tên Bài Học</th>
+                            <th>Trạng Thái</th>
+                            <th>Thao Tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${lessons.map((lesson, index) => `
+                            <tr>
+                                <td>${index + 1}</td>
+                                <td>${lesson.lesson_title}</td>
+                                <td>
+                                    ${lesson.is_completed ? '<span style="color: var(--success-color);">✓ Hoàn thành</span>' : 'Chưa hoàn thành'}
+                                </td>
+                                <td>
+                                    <a href="lesson.html?id=${lesson.lesson_id}" class="btn btn-primary">Học Ngay</a>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        function renderQuizzes(quizzes) {
+            const container = document.getElementById('quizzesList');
+            
+            if (quizzes.length === 0) {
+                container.innerHTML = '<p>Chưa có bài kiểm tra nào.</p>';
+                return;
+            }
+            
+            container.innerHTML = quizzes.map(quiz => `
+                <div style="padding: 1rem; margin-bottom: 1rem; background: var(--light-color); border-radius: 5px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <strong>${quiz.quiz_name}</strong>
+                        ${quiz.time_limit_minutes ? `<p style="margin-top: 0.5rem; color: #6b7280;">Thời gian: ${quiz.time_limit_minutes} phút</p>` : ''}
+                    </div>
+                    <a href="quiz.html?id=${quiz.quiz_id}" class="btn btn-primary">Làm Bài</a>
+                </div>
+            `).join('');
+        }
+        
+        async function enrollCourse() {
+            try {
+                await coursesAPI.enroll(courseId);
+                showAlert('Đăng ký thành công!', 'success');
+                loadCourseDetail();
+            } catch (error) {
+                showAlert('Lỗi: ' + error.message, 'error');
+            }
+        }
+        
+        loadCourseDetail();
+    </script>
+</body>
+</html>
+
