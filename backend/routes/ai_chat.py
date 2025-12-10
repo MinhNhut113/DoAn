@@ -55,7 +55,7 @@ def chat_with_ai():
                 context = f"Khóa học: {course.course_name}\n\n{course.description}"
         
         # Generate AI response
-        ai_service = get_ai_service('openai')
+        ai_service = get_ai_service()
         if not ai_service:
             # Fallback to a simple response
             ai_response = "Xin lỗi, dịch vụ AI hiện không khả dụng. Vui lòng thử lại sau."
