@@ -3,10 +3,9 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from utils import get_current_user_id
 from models import (
-    db, User, AIChatMessage, Lesson, Course, Topic
+    db, AIChatMessage, Lesson, Course
 )
-from ai_models.ai_service import generate_ai_response, get_ai_service
-from datetime import datetime
+from ai_models.ai_service import get_ai_service
 import uuid
 import logging
 from sqlalchemy import func
@@ -19,12 +18,6 @@ logger = logging.getLogger(__name__)
 def chat_with_ai():
     """
     Main chatbot endpoint - student asks questions about lessons
-    Expected JSON: {
-        "message": "Câu hỏi của sinh viên",
-        "lesson_id": 1,  # Optional
-        "course_id": 1,  # Optional
-        "conversation_id": "uuid"  # Optional, to group related messages
-    }
     """
     try:
         user_id = get_current_user_id()
@@ -48,7 +41,7 @@ def chat_with_ai():
             if lesson:
                 context = f"Bài học: {lesson.lesson_title}\n\n"
                 if lesson.lesson_content:
-                    context += f"Nội dung: {lesson.lesson_content[:1000]}"  # First 1000 chars
+                    context += f"Nội dung: {lesson.lesson_content[:1000]}"
         elif course_id:
             course = Course.query.get(course_id)
             if course:
@@ -57,7 +50,6 @@ def chat_with_ai():
         # Generate AI response
         ai_service = get_ai_service()
         if not ai_service:
-            # Fallback to a simple response
             ai_response = "Xin lỗi, dịch vụ AI hiện không khả dụng. Vui lòng thử lại sau."
             logger.warning("[Chat] AI service not available")
         else:
@@ -107,36 +99,36 @@ Hãy:
         return jsonify({'error': str(e)}), 500
 
 
-@bp.route('/health', methods=['GET'])
-def health_check():
-    """Check AI service health"""
+@bp.route('/chat/history/<conversation_id>', methods=['GET'])
+@jwt_required()
+def get_conversation_history(conversation_id):
+    """Get full conversation history"""
     try:
-        # SỬA: Không truyền tham số để lấy provider mặc định từ config (Gemini/OpenAI)
-        ai_service = get_ai_service() 
+        user_id = get_current_user_id()
         
-        # Xác định tên service đang chạy để trả về frontend
-        provider = 'unknown'
-        if ai_service:
-            # Kiểm tra kiểu class để biết là openai hay gemini
-            class_name = ai_service.__class__.__name__.lower()
-            if 'openai' in class_name:
-                provider = 'openai'
-            elif 'gemini' in class_name or 'google' in class_name:
-                provider = 'gemini'
+        messages = AIChatMessage.query.filter_by(
+            user_id=user_id,
+            conversation_id=conversation_id
+        ).order_by(AIChatMessage.created_at).all()
         
-        status = 'available' if ai_service else 'unavailable'
+        if not messages:
+            return jsonify({'error': 'Conversation not found'}), 404
         
         return jsonify({
-            'status': status,
-            'service': provider, # Trả về đúng tên provider đang dùng
-            'message': 'AI service is ' + status
+            'conversation_id': conversation_id,
+            'messages': [
+                {
+                    'message_id': m.message_id,
+                    'user_message': m.user_message,
+                    'ai_response': m.ai_response,
+                    'timestamp': m.created_at.isoformat(),
+                    'helpful_rating': m.helpful_rating,
+                    'lesson_id': m.lesson_id,
+                    'course_id': m.course_id
+                } for m in messages
+            ],
+            'total_messages': len(messages)
         }), 200
-        
-    except Exception as e:
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
         
     except Exception as e:
         logger.error(f"[Chat] Error getting history: {e}")
@@ -237,7 +229,7 @@ def get_user_conversations():
 def health_check():
     """Check AI service health"""
     try:
-        # SỬA: Không truyền tham số để lấy provider mặc định từ config (Gemini/OpenAI)
+        # Không truyền tham số để lấy provider mặc định từ config (Gemini/OpenAI)
         ai_service = get_ai_service() 
         
         # Xác định tên service đang chạy để trả về frontend
@@ -256,7 +248,7 @@ def health_check():
         
         return jsonify({
             'status': status,
-            'service': provider, # Trả về đúng tên provider đang dùng (vd: gemini)
+            'service': provider,
             'message': 'AI service is ' + status
         }), 200
         
@@ -265,7 +257,3 @@ def health_check():
             'status': 'error',
             'message': str(e)
         }), 500
-
-
-# Import func for queries
-from sqlalchemy import func
