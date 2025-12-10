@@ -107,43 +107,43 @@ Hãy:
         return jsonify({'error': str(e)}), 500
 
 
-@bp.route('/chat/history/<conversation_id>', methods=['GET'])
-@jwt_required()
-def get_conversation_history(conversation_id):
-    """Get full conversation history"""
+@bp.route('/health', methods=['GET'])
+def health_check():
+    """Check AI service health"""
     try:
-        user_id = get_current_user_id()
+        # SỬA: Không truyền tham số để lấy provider mặc định từ config (Gemini/OpenAI)
+        ai_service = get_ai_service() 
         
-        messages = AIChatMessage.query.filter_by(
-            user_id=user_id,
-            conversation_id=conversation_id
-        ).order_by(AIChatMessage.created_at).all()
+        # Xác định tên service đang chạy để trả về frontend
+        provider = 'unknown'
+        if ai_service:
+            # Kiểm tra kiểu class để biết là openai hay gemini
+            class_name = ai_service.__class__.__name__.lower()
+            if 'openai' in class_name:
+                provider = 'openai'
+            elif 'gemini' in class_name or 'google' in class_name:
+                provider = 'gemini'
         
-        if not messages:
-            return jsonify({'error': 'Conversation not found'}), 404
+        status = 'available' if ai_service else 'unavailable'
         
         return jsonify({
-            'conversation_id': conversation_id,
-            'messages': [
-                {
-                    'message_id': m.message_id,
-                    'user_message': m.user_message,
-                    'ai_response': m.ai_response,
-                    'timestamp': m.created_at.isoformat(),
-                    'helpful_rating': m.helpful_rating,
-                    'lesson_id': m.lesson_id,
-                    'course_id': m.course_id
-                } for m in messages
-            ],
-            'total_messages': len(messages)
+            'status': status,
+            'service': provider, # Trả về đúng tên provider đang dùng
+            'message': 'AI service is ' + status
         }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
         
     except Exception as e:
         logger.error(f"[Chat] Error getting history: {e}")
         return jsonify({'error': str(e)}), 500
 
 
-@bp.route('/chat/rate/<int:message_id>', methods=['POST'])
+@bp.route('/chat/ra te/<int:message_id>', methods=['POST'])
 @jwt_required()
 def rate_message(message_id):
     """Rate AI response helpfulness (1-5)"""
@@ -237,12 +237,26 @@ def get_user_conversations():
 def health_check():
     """Check AI service health"""
     try:
-        ai_service = get_ai_service('openai')
-        status = 'available' if ai_service and ai_service.client else 'unavailable'
+        # SỬA: Không truyền tham số để lấy provider mặc định từ config (Gemini/OpenAI)
+        ai_service = get_ai_service() 
+        
+        # Xác định tên service đang chạy để trả về frontend
+        provider = 'unknown'
+        if ai_service:
+            # Kiểm tra kiểu class để biết là openai hay gemini
+            class_name = ai_service.__class__.__name__.lower()
+            if 'openai' in class_name:
+                provider = 'openai'
+            elif 'gemini' in class_name or 'google' in class_name:
+                provider = 'gemini'
+        
+        # Kiểm tra xem client đã khởi tạo chưa
+        is_ready = hasattr(ai_service, 'client') and ai_service.client is not None
+        status = 'available' if is_ready else 'unavailable'
         
         return jsonify({
             'status': status,
-            'service': 'openai',
+            'service': provider, # Trả về đúng tên provider đang dùng (vd: gemini)
             'message': 'AI service is ' + status
         }), 200
         
