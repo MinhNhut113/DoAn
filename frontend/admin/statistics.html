@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thống Kê Chi Tiết - Admin</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI - Admin</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="users.html">Người Dùng</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="statistics.html" class="active">Thống Kê</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1 style="margin-bottom: 2rem;">Báo Cáo Thống Kê Chi Tiết</h1>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="statUsers">-</div>
+                <div class="stat-label">Người Dùng</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statCourses">-</div>
+                <div class="stat-label">Khóa Học</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statEnrollments">-</div>
+                <div class="stat-label">Lượt Đăng Ký</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statCompletion">-</div>
+                <div class="stat-label">Tỷ Lệ Hoàn Thành</div>
+            </div>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-container">
+                <h3>Phân Bố Người Dùng</h3>
+                <canvas id="userChart"></canvas>
+            </div>
+            
+            <div class="chart-container">
+                <h3>Tình Trạng Học Tập</h3>
+                <canvas id="progressChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        // Kiểm tra đăng nhập
+        if (!isAuthenticated()) {
+            redirectTo('../index.html');
+        }
+
+        async function initStatistics() {
+            try {
+                const stats = await adminAPI.getStatistics();
+                console.log('Stats loaded:', stats);
+
+                // 1. Cập nhật số liệu tổng quan
+                document.getElementById('statUsers').textContent = stats.users.total;
+                document.getElementById('statCourses').textContent = stats.courses.total;
+                document.getElementById('statEnrollments').textContent = stats.enrollments;
+                document.getElementById('statCompletion').textContent = stats.completion.average_rate.toFixed(1) + '%';
+
+                // 2. Vẽ biểu đồ Người dùng (Active vs Inactive)
+                const userCtx = document.getElementById('userChart').getContext('2d');
+                new Chart(userCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Đang hoạt động', 'Không hoạt động'],
+                        datasets: [{
+                            data: [stats.users.active, stats.users.total - stats.users.active],
+                            backgroundColor: ['#28a745', '#dc3545']
+                        }]
+                    },
+                    options: { responsive: true }
+                });
+
+                // 3. Vẽ biểu đồ Tiến độ (Hoàn thành vs Đang học vs Chưa học)
+                const progressCtx = document.getElementById('progressChart').getContext('2d');
+                const details = stats.completion.details || { completed: 0, in_progress: 0, not_started: 0 };
+                
+                new Chart(progressCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Hoàn thành', 'Đang học', 'Chưa bắt đầu'],
+                        datasets: [{
+                            label: 'Số lượng học viên',
+                            data: [details.completed, details.in_progress, details.not_started],
+                            backgroundColor: ['#28a745', '#ffc107', '#6c757d']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        scales: {
+                            y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error('Lỗi tải thống kê:', error);
+                showAlert('Không thể tải dữ liệu thống kê: ' + error.message, 'error');
+            }
+        }
+
+        // Chạy khi trang tải xong
+        document.addEventListener('DOMContentLoaded', initStatistics);
+    </script>
+</body>
+</html>

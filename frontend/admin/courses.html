@@ -99,15 +99,15 @@
         }
         
         function showCreateModal() {
-            editingCourseId = null;
-            document.getElementById('modalTitle').textContent = 'Thêm Khóa Học';
-            document.getElementById('courseForm').reset();
-            document.getElementById('courseModal').classList.remove('hidden');
-        }
-        
-        function hideModal() {
-            document.getElementById('courseModal').classList.add('hidden');
-        }
+        editingCourseId = null;
+        document.getElementById('modalTitle').textContent = 'Thêm Khóa Học';
+        document.getElementById('courseForm').reset();
+        document.getElementById('courseModal').style.display = 'flex'; 
+    }
+
+    function hideModal() {
+        document.getElementById('courseModal').style.display = 'none'; 
+    }
         
         async function editCourse(courseId) {
             try {
@@ -117,7 +117,7 @@
                 document.getElementById('course_name').value = course.course_name;
                 document.getElementById('description').value = course.description || '';
                 document.getElementById('thumbnail_url').value = course.thumbnail_url || '';
-                document.getElementById('courseModal').classList.remove('hidden');
+                ddocument.getElementById('courseModal').style.display = 'flex';
             } catch (error) {
                 showAlert('Lỗi: ' + error.message, 'error');
             }

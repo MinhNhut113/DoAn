@@ -1,7 +1,11 @@
 import os
 from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+# --- SỬA LỖI QUAN TRỌNG: Chỉ định chính xác vị trí file .env ---
+# Lấy đường dẫn tới file .env nằm cùng thư mục với config.py (folder backend)
+env_path = Path(__file__).parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 class Config:
     # SQL Server Configuration
@@ -11,7 +15,7 @@ class Config:
     SQL_PASSWORD = os.getenv('SQL_PASSWORD', 'YourStrongPassword')
     USE_WINDOWS_AUTH = os.getenv('USE_WINDOWS_AUTH', 'False').lower() == 'true'
     
-    # SQL Server Connection String with optimization
+    # SQL Server Connection String
     SQL_DRIVER = os.getenv('SQL_DRIVER', 'ODBC Driver 17 for SQL Server')
     
     if USE_WINDOWS_AUTH or (not SQL_USERNAME and not SQL_PASSWORD):
@@ -37,18 +41,15 @@ class Config:
     }
     
     # JWT Configuration
-    # NOTE: Do NOT use hard-coded defaults for secrets in production.
-    # Read from environment variables; if missing, application should warn/fail fast in production.
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY')
+    SECRET_KEY = os.getenv('SECRET_KEY')
     JWT_ACCESS_TOKEN_EXPIRES = 86400  # 24 hours
     JWT_DECODE_ALGORITHMS = ['HS256']
     
     # Flask Configuration
-    # IMPORTANT: set `SECRET_KEY` via environment variable in production
-    SECRET_KEY = os.getenv('SECRET_KEY')
     DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
     
     # AI Configuration
     AI_MODEL_PATH = os.getenv('AI_MODEL_PATH', 'ai_models/recommendation_model.h5')
     ENABLE_AI = os.getenv('ENABLE_AI', 'True').lower() == 'true'
-
+    AI_PROVIDER = os.getenv('AI_PROVIDER', 'gemini')

@@ -35,7 +35,8 @@ def register():
         db.session.add(user)
         db.session.commit()
         
-        access_token = create_access_token(identity=user.user_id)
+        # FIX: Cast user_id to string for JWT identity
+        access_token = create_access_token(identity=str(user.user_id))
         
         return jsonify({
             'message': 'User registered successfully',
@@ -65,7 +66,8 @@ def login():
         if not user.is_active:
             return jsonify({'error': 'Account is deactivated'}), 403
         
-        access_token = create_access_token(identity=user.user_id)
+        # FIX: Cast user_id to string for JWT identity
+        access_token = create_access_token(identity=str(user.user_id))
         
         return jsonify({
             'message': 'Login successful',
@@ -142,7 +144,7 @@ def change_password():
             return jsonify({'error': 'Invalid current password'}), 401
         
         user.set_password(new_password)
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         db.session.commit()
         
         return jsonify({
@@ -152,4 +154,3 @@ def change_password():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
-
