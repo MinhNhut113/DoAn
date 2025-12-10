@@ -143,7 +143,7 @@ def health_check():
         return jsonify({'error': str(e)}), 500
 
 
-@bp.route('/chat/ra te/<int:message_id>', methods=['POST'])
+@bp.route('/chat/rate/<int:message_id>', methods=['POST'])
 @jwt_required()
 def rate_message(message_id):
     """Rate AI response helpfulness (1-5)"""
