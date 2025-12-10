@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required
 from utils import get_current_user_id
 from models import db, User
-from datetime import datetime
+from datetime import datetime, timezone
 
 bp = Blueprint('auth', __name__)
 
@@ -109,7 +109,7 @@ def update_profile():
         if 'avatar_url' in data:
             user.avatar_url = data['avatar_url']
         
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(timezone.utc)
         db.session.commit()
         
         return jsonify({

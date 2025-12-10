@@ -12,17 +12,19 @@ class Config:
     USE_WINDOWS_AUTH = os.getenv('USE_WINDOWS_AUTH', 'False').lower() == 'true'
     
     # SQL Server Connection String with optimization
+    SQL_DRIVER = os.getenv('SQL_DRIVER', 'ODBC Driver 17 for SQL Server')
+    
     if USE_WINDOWS_AUTH or (not SQL_USERNAME and not SQL_PASSWORD):
         SQLALCHEMY_DATABASE_URI = (
             f"mssql+pyodbc://{SQL_SERVER}/{SQL_DATABASE}"
-            f"?driver=ODBC+Driver+17+for+SQL+Server"
+            f"?driver={SQL_DRIVER.replace(' ', '+')}"
             f"&trusted_connection=yes"
             f"&timeout=10"
         )
     else:
         SQLALCHEMY_DATABASE_URI = (
             f"mssql+pyodbc://{SQL_USERNAME}:{SQL_PASSWORD}@{SQL_SERVER}/{SQL_DATABASE}"
-            f"?driver=ODBC+Driver+17+for+SQL+Server"
+            f"?driver={SQL_DRIVER.replace(' ', '+')}"
             f"&timeout=10"
         )
     

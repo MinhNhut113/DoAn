@@ -153,7 +153,7 @@ CREATE TABLE quiz_question_mapping (
     question_id INT NOT NULL,
     question_order INT,
     CONSTRAINT FK_quiz_question_mapping_quiz FOREIGN KEY (quiz_id) REFERENCES quizzes(quiz_id) ON DELETE CASCADE,
-    CONSTRAINT FK_quiz_question_mapping_question FOREIGN KEY (question_id) REFERENCES quiz_questions(question_id) ON DELETE NO ACTION,
+    CONSTRAINT FK_quiz_question_mapping_question FOREIGN KEY (question_id) REFERENCES quiz_questions(question_id) ON DELETE NO ACTION, 
     UNIQUE(quiz_id, question_id)
 );
 

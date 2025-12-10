@@ -1,11 +1,14 @@
 // API Configuration - Tự động phát hiện URL
 function getApiBaseUrl() {
-    const hostname = window.location.hostname;
-    const protocol = window.location.protocol;
-    const port = window.location.port || (protocol === 'https:' ? '443' : '80');
+    // Nếu chạy file HTML trực tiếp từ máy tính (file://)
+    if (window.location.protocol === 'file:') {
+        return 'http://localhost:5000/api';
+    }
     
-    // Nếu running trên same domain/port
-    return `${protocol}//${hostname}:${port}/api`;
+    // Nếu chạy qua Live Server hoặc Python http.server (ví dụ localhost:8000)
+    // Mặc định Backend chạy ở port 5000
+    const hostname = window.location.hostname;
+    return `http://${hostname}:5000/api`;
 }
 
 // Chỉ khai báo MỘT LẦN
