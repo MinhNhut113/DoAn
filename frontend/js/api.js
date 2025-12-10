@@ -216,9 +216,9 @@ const aiAPI = {
         method: 'POST'
     }),
     
-    askQuestion: (question, courseId = null) => apiRequest('/ai/ask', {
+    askQuestion: (question, courseId = null) => apiRequest('/ai/chat', { 
         method: 'POST',
-        body: JSON.stringify({ question, course_id: courseId })
+        body: JSON.stringify({ message: question, course_id: courseId }) 
     })
 };
 

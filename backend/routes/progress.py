@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from utils import get_current_user_id
-from models import db, Enrollment, LessonProgress, Lesson, QuizResult, Topic, LearningAnalytics, Quiz
+# Thêm Course vào dòng import này để dùng cho toàn file
+from models import db, Enrollment, LessonProgress, Lesson, QuizResult, Topic, LearningAnalytics, Quiz, Course
 from sqlalchemy import func
 
 bp = Blueprint('progress', __name__)
@@ -98,35 +99,63 @@ def get_dashboard():
     try:
         user_id = get_current_user_id()
         
-        # Get user enrollments
+        # Lấy danh sách khóa học đã đăng ký
         enrollments = Enrollment.query.filter_by(user_id=user_id).all()
-        total_courses = len(enrollments)
         
-        # Calculate overall stats
+        # Xây dựng danh sách chi tiết (quan trọng để sửa lỗi frontend)
+        courses_progress = []
         total_progress = 0
-        for enrollment in enrollments:
-            total_progress += float(enrollment.progress_percentage) if enrollment.progress_percentage else 0
+        total_lessons_completed = 0
         
+        for enrollment in enrollments:
+            course = Course.query.get(enrollment.course_id)
+            if course:
+                progress = float(enrollment.progress_percentage) if enrollment.progress_percentage else 0
+                total_progress += progress
+                
+                # Tính số bài học đã hoàn thành của khóa này
+                completed_lessons = LessonProgress.query.filter_by(
+                    user_id=user_id, is_completed=True
+                ).join(Lesson, Lesson.lesson_id == LessonProgress.lesson_id).filter(
+                    Lesson.course_id == course.course_id
+                ).count()
+                
+                total_lessons_completed += completed_lessons
+
+                courses_progress.append({
+                    'course_id': course.course_id,
+                    'course_name': course.course_name,
+                    'description': course.description,
+                    'thumbnail_url': course.thumbnail_url,
+                    'progress_percentage': progress,
+                    'completed_lessons': completed_lessons
+                })
+        
+        total_courses = len(courses_progress)
         average_progress = (total_progress / total_courses) if total_courses > 0 else 0
         
-        # Get recent quiz results
+        # Lấy kết quả quiz gần đây
         recent_quizzes = QuizResult.query.filter_by(user_id=user_id).order_by(
             QuizResult.submitted_at.desc()
         ).limit(5).all()
         
+        recent_quizzes_data = []
+        for q in recent_quizzes:
+            quiz = Quiz.query.get(q.quiz_id)
+            recent_quizzes_data.append({
+                'quiz_id': q.quiz_id,
+                'quiz_name': quiz.quiz_name if quiz else f"Quiz #{q.quiz_id}",
+                'score': float(q.score),
+                'submitted_at': q.submitted_at.isoformat() if q.submitted_at else None
+            })
+
         return jsonify({
             'total_courses': total_courses,
             'average_progress': average_progress,
-            'recent_quizzes': [
-                {
-                    'quiz_id': q.quiz_id,
-                    'score': float(q.score),
-                    'submitted_at': q.submitted_at.isoformat() if q.submitted_at else None
-                }
-                for q in recent_quizzes
-            ]
+            'total_lessons_completed': total_lessons_completed,
+            'courses_progress': courses_progress, # Trường này sửa lỗi undefined length
+            'recent_quizzes': recent_quizzes_data
         }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-

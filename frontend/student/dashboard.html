@@ -214,24 +214,66 @@
         async function sendChatMessage() {
             const input = document.getElementById('chatInput');
             const message = input.value.trim();
-            if (!message) return;
             
+            // 1. Kiểm tra input rỗng
+            if (!message || message.length === 0) {
+                return;
+            }
+            
+            // 2. Xóa input & hiển thị tin nhắn user ngay lập tức
             input.value = '';
             const messagesDiv = document.getElementById('chatMessages');
             
-            // Display user message
-            messagesDiv.innerHTML += `<div style="text-align: right; margin-bottom: 10px;"><div style="background: var(--primary-color); color: white; padding: 8px 12px; border-radius: 10px; display: inline-block; max-width: 80%;">${escapeHtml(message)}</div></div>`;
+            messagesDiv.innerHTML += `
+                <div style="text-align: right; margin-bottom: 10px;">
+                    <div style="background: var(--primary-color); color: white; padding: 8px 12px; border-radius: 10px; display: inline-block; max-width: 80%; word-wrap: break-word;">
+                        ${escapeHtml(message)}
+                    </div>
+                </div>`;
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            // 3. Hiển thị "Đang suy nghĩ..."
+            const loadingId = 'loading-' + Date.now();
+            messagesDiv.innerHTML += `
+                <div id="${loadingId}" style="text-align: left; margin-bottom: 10px;">
+                    <div style="background: #f3f4f6; padding: 8px 12px; border-radius: 10px; display: inline-block; font-style: italic; color: #666;">
+                        Bot đang gõ...
+                    </div>
+                </div>`;
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
             
             try {
+                // 4. Gọi API
+                // Lưu ý: Đảm bảo api.js đã trỏ đúng endpoint '/ai/chat'
                 const response = await aiAPI.askQuestion(message);
-                const botResponse = response.response || 'Xin lỗi, tôi không thể trả lời câu hỏi này.';
-                messagesDiv.innerHTML += `<div style="text-align: left; margin-bottom: 10px;"><div style="background: #f3f4f6; padding: 8px 12px; border-radius: 10px; display: inline-block; max-width: 80%;">${escapeHtml(botResponse)}</div></div>`;
-                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                
+                // 5. Xóa loading
+                const loadingEl = document.getElementById(loadingId);
+                if (loadingEl) loadingEl.remove();
+                
+                // 6. Lấy câu trả lời (Ưu tiên ai_response theo backend mới)
+                const botReply = response.ai_response || response.response || "Xin lỗi, tôi không hiểu câu hỏi.";
+                
+                messagesDiv.innerHTML += `
+                    <div style="text-align: left; margin-bottom: 10px;">
+                        <div style="background: #f3f4f6; padding: 8px 12px; border-radius: 10px; display: inline-block; max-width: 80%; word-wrap: break-word;">
+                            ${escapeHtml(botReply)}
+                        </div>
+                    </div>`;
             } catch (error) {
                 console.error('Chat error:', error);
-                messagesDiv.innerHTML += `<div style="text-align: left; margin-bottom: 10px;"><div style="background: #fee2e2; padding: 8px 12px; border-radius: 10px; color: #dc2626;">Lỗi: ${escapeHtml(error.message)}</div></div>`;
+                const loadingEl = document.getElementById(loadingId);
+                if (loadingEl) loadingEl.remove();
+                
+                messagesDiv.innerHTML += `
+                    <div style="text-align: left; margin-bottom: 10px;">
+                        <div style="background: #fee2e2; padding: 8px 12px; border-radius: 10px; color: #dc2626; display: inline-block;">
+                            Lỗi: ${escapeHtml(error.message)}
+                        </div>
+                    </div>`;
             }
+            
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
         
         function escapeHtml(text) {
