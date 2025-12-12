@@ -7,7 +7,7 @@ from datetime import datetime
 import json
 import time
 import logging
-from backend.ai_models.ai_service import get_ai_service
+from ai_models.ai_service import get_ai_service
 
 bp = Blueprint('admin', __name__)
 logger = logging.getLogger(__name__)

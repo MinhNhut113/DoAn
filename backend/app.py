@@ -7,6 +7,12 @@ try:
     from .models import db
 except Exception:
     # Fallback to absolute imports when executed as a script from project root
+    import sys
+    from pathlib import Path
+    # Add backend directory to Python path
+    backend_dir = Path(__file__).parent
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
     from config import Config
     from models import db
 import os
@@ -107,6 +113,10 @@ try:
 except Exception:
     # When running `python backend/app.py`, the script's directory is on sys.path
     # and the local `routes` package can be imported directly.
+    import sys
+    backend_dir = Path(__file__).parent
+    if str(backend_dir) not in sys.path:
+        sys.path.insert(0, str(backend_dir))
     from routes import auth, courses, lessons, quizzes, progress, admin, ai_recommendations, ai_chat, ai_questions, incorrect_answers, ai_compat, notifications, assignments
     from routes import ai_lessons
 # Register blueprints
