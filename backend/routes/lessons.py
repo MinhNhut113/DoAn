@@ -116,7 +116,7 @@ def get_lesson_quiz(lesson_id):
         prefix = f"LessonQuiz:{lesson_id}:"
         quiz = Quiz.query.filter(Quiz.quiz_name.startswith(prefix)).first()
         if not quiz:
-            return jsonify({'message': 'No quiz for this lesson'}), 404
+            return jsonify({'message': 'No quiz available for this lesson yet'}), 200
 
         # Load questions
         mappings = QuizQuestionMapping.query.filter_by(quiz_id=quiz.quiz_id).order_by(QuizQuestionMapping.question_order).all()

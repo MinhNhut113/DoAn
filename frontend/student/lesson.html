@@ -188,9 +188,13 @@
                 if (res && res.quiz) {
                     const area = document.getElementById('lessonQuizArea');
                     area.innerHTML = `<a class="btn btn-primary" href="/student/quiz.html?id=${res.quiz.quiz_id}">Làm bài kiểm tra cho bài học này</a>`;
+                } else if (res && res.message) {
+                    // No quiz available yet
+                    const area = document.getElementById('lessonQuizArea');
+                    area.innerHTML = `<p style="color: #6b7280; font-style: italic;">${res.message}</p>`;
                 }
             } catch (err) {
-                // If 404 or no quiz, ignore
+                // If error, just don't show anything
                 console.debug('No quiz for lesson or error:', err.message || err);
             }
         }
