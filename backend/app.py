@@ -1,8 +1,8 @@
 from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
-from config import Config
-from models import db
+from .config import Config
+from .models import db
 import os
 import logging
 from pathlib import Path
@@ -69,9 +69,9 @@ def log_auth_header():
         if auth_header:
             logger.info(f"[DEBUG] Incoming Authorization header: {auth_header}")
 
-# Import routes
-from routes import auth, courses, lessons, quizzes, progress, admin, ai_recommendations, ai_chat, ai_questions, incorrect_answers, ai_compat, notifications, assignments
-from routes import ai_lessons
+# Import routes (relative imports)
+from .routes import auth, courses, lessons, quizzes, progress, admin, ai_recommendations, ai_chat, ai_questions, incorrect_answers, ai_compat, notifications, assignments
+from .routes import ai_lessons
 # Register blueprints
 app.register_blueprint(auth.bp, url_prefix='/api/auth')
 app.register_blueprint(courses.bp, url_prefix='/api/courses')

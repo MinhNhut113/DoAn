@@ -85,7 +85,7 @@ def generate_questions():
         
         # Generate questions using AI
         start_time = time.time()
-        ai_service = get_ai_service('openai')
+        ai_service = get_ai_service()
         
         if not ai_service:
             gen_request.status = 'failed'
@@ -336,15 +336,15 @@ def update_generated_question(question_id):
                         # fallback to storing as single option
                         question.options = json.dumps([opts])
                 except Exception:
-                    # comma-separated
-                    parts = [p.trim() if hasattr(p, 'trim') else p.strip() for p in opts.split(',')]
+                    # comma-separated fallback — use strip() (Python strings don't have trim())
+                    parts = [p.strip() for p in opts.split(',')]
                     question.options = json.dumps([p for p in parts if p])
 
         if 'correct_answer' in data:
             try:
                 question.correct_answer = int(data.get('correct_answer'))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[Questions] Invalid correct_answer value: {e}")
 
         if 'explanation' in data:
             question.explanation = data.get('explanation')
@@ -352,8 +352,8 @@ def update_generated_question(question_id):
         if 'difficulty_level' in data:
             try:
                 question.difficulty_level = int(data.get('difficulty_level'))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"[Questions] Invalid difficulty_level value: {e}")
 
         # Do not automatically approve on edit; admin may call approve separately
         question.updated_at = datetime.utcnow()

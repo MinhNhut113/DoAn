@@ -6,9 +6,11 @@ from functools import wraps
 from datetime import datetime
 import json
 import time
+import logging
 from backend.ai_models.ai_service import get_ai_service
 
 bp = Blueprint('admin', __name__)
+logger = logging.getLogger(__name__)
 
 def admin_required(f):
     @wraps(f)
@@ -669,11 +671,12 @@ Trả về CHÍNH XÁC JSON array gồm {num_questions} phần tử, mỗi phầ
         # save raw response into error_message field if necessary (or extend model)
         try:
             gen.error_message = f"AI raw response: {raw_response[:2000]}"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"[Admin] Failed to store raw response: {e}")
         db.session.add(gen)
         db.session.commit()
-    except Exception:
+    except Exception as e:
+        logger.error(f"[Admin] Error creating generation request: {e}")
         db.session.rollback()
 
     return quiz.quiz_id

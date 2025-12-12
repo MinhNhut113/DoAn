@@ -5,6 +5,10 @@ from werkzeug.security import generate_password_hash
 import sys
 import os
 import secrets
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def initialize_database():
     """Initializes the database, creates tables, and adds the admin user."""
@@ -19,21 +23,21 @@ def initialize_database():
 
     # 4. Thực hiện các thao tác DB trong "application context".
     with app.app_context():
-        print("Kiểm tra và tạo bảng nếu cần...")
+        logger.info("Checking and creating tables if needed...")
         db.create_all()
-        print("Bảng đã được tạo (nếu chưa tồn tại).")
+        logger.info("Tables created (if not already present).")
 
         # Thêm admin user nếu chưa có
         if not db.session.execute(db.select(User).where(User.username == 'admin')).scalar_one_or_none():
-            print("Tạo tài khoản admin...")
+            logger.info("Creating admin account...")
             # Prefer ADMIN_PASSWORD from environment. If missing, generate a strong temporary password.
             admin_password = os.getenv('ADMIN_PASSWORD')
             generated = False
             if not admin_password:
                 admin_password = secrets.token_urlsafe(16)
                 generated = True
-                print("[WARNING] ADMIN_PASSWORD not set. A temporary admin password was generated below. Change it immediately.")
-                print(admin_password)
+                logger.warning("[WARNING] ADMIN_PASSWORD not set. A temporary admin password was generated below. Change it immediately.")
+                logger.warning(admin_password)
 
             admin_user = User(
                 username='admin',
@@ -46,16 +50,16 @@ def initialize_database():
             db.session.add(admin_user)
             db.session.commit()
             if not generated:
-                print("Tài khoản admin đã được tạo. (Password provided via ADMIN_PASSWORD env var)")
+                logger.info("Admin account created. (Password provided via ADMIN_PASSWORD env var)")
             else:
-                print("Tài khoản admin đã được tạo với mật khẩu tạm thời (bắt buộc đổi).")
+                logger.info("Admin account created with temporary password (must change).")
 
 if __name__ == '__main__':
     try:
-        print("--- Bắt đầu quá trình khởi tạo Database ---")
+        logger.info("--- Starting database initialization process ---")
         initialize_database()
-        print("--- Quá trình khởi tạo Database hoàn tất ---")
+        logger.info("--- Database initialization process completed ---")
     except Exception as e:
-        print(f"[❌] Lỗi nghiêm trọng khi khởi tạo database: {e}", file=sys.stderr)
-        print("[ℹ]  Vui lòng kiểm tra chuỗi kết nối trong file .env và đảm bảo SQL Server đang chạy.", file=sys.stderr)
+        logger.error(f"[❌] Critical error during database initialization: {e}", exc_info=True)
+        logger.error("[ℹ]  Please check the connection string in .env file and ensure SQL Server is running.")
         sys.exit(1)

@@ -1,5 +1,9 @@
 from dotenv import load_dotenv
 import os, traceback
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -8,7 +12,7 @@ def main():
         import google.generativeai as genai
         genai.configure(api_key=os.getenv('GEMINI_API_KEY'))
 
-        print('Listing models from Google Generative API...')
+        logger.info('Listing models from Google Generative API...')
         models = genai.list_models()
         count = 0
         for m in models:
@@ -19,15 +23,16 @@ def main():
                     name = m.get('name') or m.get('id') or str(m)
                 else:
                     name = getattr(m, 'name', str(m))
-                print(f"- {name}")
-            except Exception:
-                print('-', m)
+                logger.info(f"- {name}")
+            except Exception as e:
+                logger.debug(f"Failed to extract model name: {e}")
+                logger.info(f"- {m}")
 
-        print(f'Total models found: {count}')
+        logger.info(f'Total models found: {count}')
 
     except Exception as e:
-        print('Error listing models:')
-        traceback.print_exc()
+        logger.error('Error listing models:')
+        logger.error(traceback.format_exc())
 
 if __name__ == '__main__':
     main()

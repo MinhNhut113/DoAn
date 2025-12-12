@@ -5,8 +5,10 @@ from models import db, User
 from datetime import datetime, timezone
 from datetime import datetime, timezone, timedelta
 import random
+import logging
 
 bp = Blueprint('auth', __name__)
+logger = logging.getLogger(__name__)
 
 @bp.route('/register', methods=['POST'])
 def register():
@@ -181,8 +183,8 @@ def forgot_password():
         user.reset_token_expiry = expiry
         db.session.commit()
 
-        # Print token to server console (no SMTP configured)
-        print(f'RESET TOKEN FOR {email}: {token}')
+        # Log token to server console (no SMTP configured)
+        logger.info(f'[Auth] Reset token for {email}: {token}')
 
         return jsonify({'message': 'If the email exists, a reset token has been sent'}), 200
     except Exception as e:

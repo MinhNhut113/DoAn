@@ -5,36 +5,39 @@ import traceback
 
 load_dotenv()
 
-print('ENV AI_PROVIDER=', os.getenv('AI_PROVIDER'))
-print('GEMINI set=', bool(os.getenv('GEMINI_API_KEY')))
-print('OPENAI set=', bool(os.getenv('OPENAI_API_KEY')))
+import logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.info(f'ENV AI_PROVIDER={os.getenv("AI_PROVIDER")}')
+logger.info(f'GEMINI set={bool(os.getenv("GEMINI_API_KEY"))}')
+logger.info(f'OPENAI set={bool(os.getenv("OPENAI_API_KEY"))}')
 
 try:
     from ai_models.ai_service import get_ai_service, AIServiceConfig
     cfg = AIServiceConfig()
-    print('Config: provider=', cfg.ai_provider, 'model=', cfg.gemini_model if cfg.ai_provider=='gemini' else cfg.openai_model)
+    logger.info(f'Config: provider={cfg.ai_provider} model={cfg.gemini_model if cfg.ai_provider=="gemini" else cfg.openai_model}')
 
     svc = get_ai_service()
-    print('Service instance:', type(svc))
-    print('Has client:', hasattr(svc, 'client') and svc.client is not None)
+    logger.info(f'Service instance: {type(svc)}')
+    logger.info(f'Has client: {hasattr(svc, "client") and svc.client is not None}')
 
     topic = 'Giới thiệu Python'
     level = 'beginner'
-    print('\n--- Calling generate_lesson_content ---')
+    logger.info('--- Calling generate_lesson_content ---')
     lesson = svc.generate_lesson_content(topic, level)
-    print('Result type:', type(lesson))
-    print('Result content (first 1000 chars):')
+    logger.info(f'Result type: {type(lesson)}')
+    logger.info('Result content (first 1000 chars):')
     if isinstance(lesson, dict):
-        print(json.dumps(lesson, ensure_ascii=False, indent=2))
+        logger.info(json.dumps(lesson, ensure_ascii=False, indent=2))
     else:
-        print(str(lesson)[:1000])
+        logger.info(str(lesson)[:1000])
 
-    print('\n--- Calling generate_response fallback ---')
+    logger.info('--- Calling generate_response fallback ---')
     resp = svc.generate_response(f'Soạn nội dung bài giảng về: {topic} (trình độ: {level})')
-    print('Fallback response type:', type(resp))
-    print('Fallback response (first 1000 chars):')
-    print(str(resp)[:1000])
+    logger.info(f'Fallback response type: {type(resp)}')
+    logger.info('Fallback response (first 1000 chars):')
+    logger.info(str(resp)[:1000])
 
 except Exception as e:
-    print('ERROR during diagnostic:')
-    traceback.print_exc()
+    logger.error('ERROR during diagnostic:')
+    logger.error(traceback.format_exc())
