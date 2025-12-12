@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý Quiz - Admin</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI - Admin</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="quizzes.html">Quiz</a></li>
+                <li><a href="create_lesson_ai.html">AI Tạo Bài</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="users.html">Người Dùng</a></li>
+                <li><a href="statistics.html">Thống Kê</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1>Quản Lý Quiz & Câu Hỏi</h1>
+
+        <div style="display:flex; gap:20px;">
+            <div style="flex:1;">
+                <div class="card">
+                    <div class="card-header">Danh sách câu hỏi</div>
+                    <div style="padding:12px;">
+                        <input id="questionSearch" placeholder="Tìm kiếm câu hỏi..." class="form-control" style="margin-bottom:8px;">
+                        <div id="questionsList">
+                            <div class="loading"><div class="spinner"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="width:420px;">
+                <div class="card">
+                    <div class="card-header">Tạo / Sửa câu hỏi</div>
+                    <div style="padding:12px;">
+                        <input id="q_topic" class="form-control" placeholder="Khóa / Topic (optional)">
+                        <input id="q_course_id" class="form-control" placeholder="Course ID (optional)">
+                        <textarea id="q_text" rows="4" class="form-control" placeholder="Nội dung câu hỏi"></textarea>
+                        <select id="q_type" class="form-control">
+                            <option value="multiple_choice">Multiple Choice</option>
+                            <option value="text">Text</option>
+                        </select>
+                        <textarea id="q_options" class="form-control" placeholder='Options as JSON array for multiple choice, e.g. ["A","B","C"]'></textarea>
+                        <input id="q_correct" type="number" class="form-control" placeholder="Correct answer index (0, 1, 2, ...)">
+                        <div style="display:flex; gap:8px; margin-top:8px;">
+                            <button class="btn btn-primary" id="saveQuestionBtn">Lưu</button>
+                            <button class="btn btn-secondary" id="resetQuestionBtn">Reset</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        if (!isAuthenticated()) redirectTo('../index.html');
+
+        let editingQuestionId = null;
+        async function loadQuestions() {
+            try {
+                const qs = await apiRequest('/admin/questions');
+                // If backend doesn't have /admin/questions, fallback to adminAPI.getQuestions maybe later
+                renderQuestions(qs || []);
+            } catch (err) {
+                console.error('Lỗi tải câu hỏi:', err);
+                document.getElementById('questionsList').innerHTML = '<p class="muted">Lỗi tải câu hỏi.</p>';
+            }
+        }
+
+        function renderQuestions(list) {
+            const root = document.getElementById('questionsList');
+            const filter = document.getElementById('questionSearch').value.toLowerCase();
+            const filtered = list.filter(q => !filter || (q.question_text && q.question_text.toLowerCase().includes(filter)));
+            if (filtered.length === 0) return root.innerHTML = '<p class="muted">Không tìm thấy câu hỏi.</p>';
+            root.innerHTML = filtered.map(q => `
+                <div style="padding:8px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="flex:1;">
+                        <div><strong>${q.question_text}</strong></div>
+                        <div class="muted">${q.course_id ? 'Course: ' + q.course_id : ''}</div>
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button class="btn btn-sm btn-primary" onclick="editQuestion(${q.question_id})">Sửa</button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteQuestion(${q.question_id})">Xóa</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        document.getElementById('questionSearch').addEventListener('input', () => loadQuestions());
+
+        async function editQuestion(id) {
+            try {
+                const q = await apiRequest(`/admin/questions/${id}`);
+                editingQuestionId = id;
+                document.getElementById('q_topic').value = q.topic_id || '';
+                document.getElementById('q_course_id').value = q.course_id || '';
+                document.getElementById('q_text').value = q.question_text || '';
+                document.getElementById('q_type').value = q.question_type || 'multiple_choice';
+                try { document.getElementById('q_options').value = JSON.stringify(q.options || []); } catch(e){ document.getElementById('q_options').value = q.options || ''; }
+                document.getElementById('q_correct').value = q.correct_answer || '';
+            } catch (err) { showAlert('Lỗi tải câu hỏi: ' + err.message, 'error'); }
+        }
+
+        async function deleteQuestion(id) {
+            if (!confirm('Xóa câu hỏi này?')) return;
+            try { await adminAPI.deleteQuestion(id); showAlert('Đã xóa', 'success'); loadQuestions(); } catch(err){ showAlert('Lỗi xóa: '+err.message,'error'); }
+        }
+
+        document.getElementById('saveQuestionBtn').addEventListener('click', async () => {
+            const topicVal = document.getElementById('q_topic').value;
+            const courseVal = document.getElementById('q_course_id').value;
+            const correctVal = document.getElementById('q_correct').value;
+            const payload = {
+                topic_id: topicVal ? parseInt(topicVal) : null,
+                course_id: courseVal ? parseInt(courseVal) : null,
+                question_text: document.getElementById('q_text').value,
+                question_type: document.getElementById('q_type').value,
+                options: (() => { try { return JSON.parse(document.getElementById('q_options').value || '[]'); } catch(e){ return document.getElementById('q_options').value; } })(),
+                correct_answer: correctVal ? parseInt(correctVal) : 0
+            };
+            try {
+                if (editingQuestionId) {
+                    await adminAPI.updateQuestion(editingQuestionId, payload);
+                    showAlert('Cập nhật thành công', 'success');
+                } else {
+                    await adminAPI.createQuestion(payload);
+                    showAlert('Tạo câu hỏi thành công', 'success');
+                }
+                document.getElementById('q_topic').value = '';
+                document.getElementById('q_course_id').value = '';
+                document.getElementById('q_text').value = '';
+                document.getElementById('q_options').value = '';
+                document.getElementById('q_correct').value = '';
+                editingQuestionId = null;
+                loadQuestions();
+            } catch (err) { showAlert('Lỗi lưu: ' + err.message, 'error'); }
+        });
+
+        document.getElementById('resetQuestionBtn').addEventListener('click', () => {
+            editingQuestionId = null;
+            document.getElementById('q_topic').value = '';
+            document.getElementById('q_course_id').value = '';
+            document.getElementById('q_text').value = '';
+            document.getElementById('q_options').value = '';
+            document.getElementById('q_correct').value = '';
+        });
+
+        // load on ready
+        loadQuestions();
+    </script>
+</body>
+</html>

@@ -21,7 +21,10 @@
     </div>
 
     <div class="container">
-        <h1 style="margin-bottom: 2rem;">Quản Lý Người Dùng</h1>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:1rem;">
+            <h1 style="margin:0;">Quản Lý Người Dùng</h1>
+            <input id="userSearch" class="form-control" placeholder="Tìm theo tên/email/username" style="max-width:360px;">
+        </div>
         
         <div class="card">
             <table class="table">
@@ -54,6 +57,11 @@
         if (!isAuthenticated()) {
             redirectTo('../index.html');
         }
+        // search box handler
+        function setupUserSearch() {
+            const input = document.getElementById('userSearch');
+            if (input) input.addEventListener('input', () => loadUsers());
+        }
         
         async function loadUsers() {
             try {
@@ -66,13 +74,20 @@
         
         function renderUsers(users) {
             const tbody = document.getElementById('usersTable');
+            const search = document.getElementById('userSearch') ? document.getElementById('userSearch').value.toLowerCase() : '';
+            const filtered = users.filter(u => !search || (u.full_name && u.full_name.toLowerCase().includes(search)) || (u.email && u.email.toLowerCase().includes(search)) || (u.username && u.username.toLowerCase().includes(search)));
             
             if (users.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Không có người dùng nào.</td></tr>';
                 return;
             }
             
-            tbody.innerHTML = users.map(user => `
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Không có người dùng phù hợp.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(user => `
                 <tr>
                     <td>${user.user_id}</td>
                     <td>${user.username}</td>
@@ -126,6 +141,7 @@
             }
         }
         
+        setupUserSearch();
         loadUsers();
     </script>
 </body>

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quản Lý Khóa Học - Admin</title>
     <link rel="stylesheet" href="../css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
     <div class="navbar">
@@ -21,8 +22,11 @@
     </div>
 
     <div class="container">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
-            <h1>Quản Lý Khóa Học</h1>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap:12px;">
+            <div style="flex:1; display:flex; gap:12px; align-items:center;">
+                <h1 style="margin:0;">Quản Lý Khóa Học</h1>
+                <input id="courseSearch" class="form-control" placeholder="Tìm kiếm khóa học..." style="max-width:320px;">
+            </div>
             <button class="btn btn-primary" onclick="showCreateModal()">Thêm Khóa Học</button>
         </div>
         
@@ -50,6 +54,49 @@
                     <label for="thumbnail_url">URL Ảnh Bìa</label>
                     <input type="url" id="thumbnail_url">
                 </div>
+                <hr>
+                <div class="form-group">
+                    <label>Danh sách Bài Giảng</label>
+                    <div id="lessonsList" style="max-height: 240px; overflow-y: auto; border: 1px solid #eee; padding: 8px; border-radius: 6px; background: #fafafa;">
+                        <p class="muted">Chưa có bài giảng nào.</p>
+                    </div>
+                </div>
+                <hr>
+                <div class="form-group">
+                    <label>Danh sách học viên đã ghi danh</label>
+                    <div style="display:flex; gap:8px; margin-bottom:8px;">
+                        <input id="enrollUserInput" class="form-control" placeholder="User ID hoặc Email để ghi danh">
+                        <button class="btn btn-primary" onclick="enrollUserAction()">Ghi danh</button>
+                    </div>
+                    <div id="enrollmentsList" style="max-height:160px; overflow-y:auto; border:1px solid #eee; padding:8px; border-radius:6px; background:#fff;">
+                        <p class="muted">Chưa có học viên nào.</p>
+                    </div>
+                </div>
+                <div id="lessonPreview" style="display:none; margin-top:12px; border-top:1px solid #eee; padding-top:10px;">
+                    <h4>Xem bài giảng</h4>
+                    <div id="lessonPreviewTitle" style="font-weight:700"></div>
+                    <div id="lessonPreviewContent" style="margin-top:8px; max-height:280px; overflow-y:auto; background:#fff; padding:8px; border-radius:6px; border:1px solid #eee"></div>
+                </div>
+
+                <div id="lessonEditForm" style="display:none; margin-top:12px; border-top:1px solid #eee; padding-top:10px;">
+                    <h4>Chỉnh sửa bài giảng</h4>
+                    <div class="form-group">
+                        <label>Tiêu đề</label>
+                        <input type="text" id="editLessonTitle" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Thời lượng (phút)</label>
+                        <input type="number" id="editLessonDuration" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label>Nội dung (Markdown)</label>
+                        <textarea id="editLessonContent" rows="8" class="form-control"></textarea>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-primary" onclick="saveEditedLesson()">Lưu bài</button>
+                        <button class="btn btn-secondary" onclick="cancelEditLesson()">Hủy</button>
+                    </div>
+                </div>
                 <div style="display: flex; gap: 1rem;">
                     <button type="submit" class="btn btn-primary">Lưu</button>
                     <button type="button" class="btn btn-secondary" onclick="hideModal()">Hủy</button>
@@ -66,10 +113,23 @@
             redirectTo('../index.html');
         }
         
+        // Nếu URL có query param id, lưu lại để mở modal khi load xong
+        const openCourseIdFromQuery = new URLSearchParams(window.location.search).get('id');
+
         async function loadCourses() {
             try {
                 const courses = await coursesAPI.getAll(false);
                 renderCourses(courses);
+
+                // Nếu có id trong query string, mở modal chỉnh sửa khóa học đó
+                if (openCourseIdFromQuery) {
+                    const id = parseInt(openCourseIdFromQuery);
+                    if (!isNaN(id)) {
+                        // Tìm trang đã render xong, sau đó gọi editCourse
+                        // Small delay to ensure buttons/rendering completed
+                        setTimeout(() => editCourse(id), 100);
+                    }
+                }
             } catch (error) {
                 showAlert('Lỗi tải khóa học: ' + error.message, 'error');
             }
@@ -78,12 +138,15 @@
         function renderCourses(courses) {
             const grid = document.getElementById('coursesGrid');
             
-            if (courses.length === 0) {
+            const filter = document.getElementById('courseSearch') ? document.getElementById('courseSearch').value.toLowerCase() : '';
+            const filtered = courses.filter(c => !filter || (c.course_name && c.course_name.toLowerCase().includes(filter)));
+
+            if (filtered.length === 0) {
                 grid.innerHTML = '<p>Chưa có khóa học nào.</p>';
                 return;
             }
             
-            grid.innerHTML = courses.map(course => `
+            grid.innerHTML = filtered.map(course => `
                 <div class="course-card">
                     ${course.thumbnail_url ? `<img src="${course.thumbnail_url}" alt="${course.course_name}">` : ''}
                     <div class="course-card-body">
@@ -117,7 +180,69 @@
                 document.getElementById('course_name').value = course.course_name;
                 document.getElementById('description').value = course.description || '';
                 document.getElementById('thumbnail_url').value = course.thumbnail_url || '';
-                ddocument.getElementById('courseModal').style.display = 'flex';
+                document.getElementById('courseModal').style.display = 'flex';
+
+                // Load lessons for this course and render inside modal
+                try {
+                    const lessons = await apiRequest(`/admin/courses/${courseId}/lessons`);
+                    const list = document.getElementById('lessonsList');
+                    if (!lessons || lessons.length === 0) {
+                        list.innerHTML = '<p class="muted">Chưa có bài giảng nào.</p>';
+                    } else {
+                        list.innerHTML = lessons.map(ls => `
+                            <div id="lesson-item-${ls.lesson_id}" data-lesson-id="${ls.lesson_id}" style="padding:8px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
+                                <div style="flex:1;">
+                                    <strong>${ls.lesson_title}</strong>
+                                    <div class="muted" style="font-size:12px">Thời lượng: ${ls.duration_minutes || '-'} phút</div>
+                                </div>
+                                <div style="display:flex; gap:8px; margin-left:12px;">
+                                    <button class="btn btn-sm btn-outline" onclick="previewLesson(${ls.lesson_id})">Chi tiết</button>
+                                    <button class="btn btn-sm btn-primary" onclick="openEditLesson(${ls.lesson_id})">Sửa</button>
+                                    <a class="btn btn-sm btn-success" href="../student/lesson.html?id=${ls.lesson_id}" target="_blank">Mở trang</a>
+                                    <button class="btn btn-sm btn-danger" onclick="confirmDeleteLesson(${ls.lesson_id})">Xóa</button>
+                                </div>
+                            </div>
+                        `).join('');
+
+                        // Nếu có lesson id mới muốn highlight
+                        const newLessonId = new URLSearchParams(window.location.search).get('new_lesson_id');
+                        if (newLessonId) {
+                            const el = document.getElementById(`lesson-item-${newLessonId}`);
+                            if (el) {
+                                el.style.background = '#fff8cc';
+                                el.style.transition = 'background 0.6s ease';
+                                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                // remove highlight after a while
+                                setTimeout(() => el.style.background = '', 4000);
+                            }
+                        }
+                    }
+                } catch (err) {
+                    document.getElementById('lessonsList').innerHTML = '<p class="muted">Lỗi tải bài giảng.</p>';
+                    console.error('Lỗi tải bài giảng:', err);
+                }
+                    // Load enrollments
+                    try {
+                        const enrolls = await apiRequest(`/admin/courses/${courseId}/enrollments`);
+                        const el = document.getElementById('enrollmentsList');
+                        if (!enrolls || enrolls.length === 0) {
+                            el.innerHTML = '<p class="muted">Chưa có học viên nào.</p>';
+                        } else {
+                            el.innerHTML = enrolls.map(en => `
+                                <div style="display:flex; justify-content:space-between; align-items:center; padding:6px; border-bottom:1px solid #eee;">
+                                    <div>
+                                        <strong>ID: ${en.user_id}</strong>
+                                        <div class="muted" style="font-size:12px">Progress: ${en.progress_percentage || 0}%</div>
+                                    </div>
+                                    <div>
+                                        <button class="btn btn-sm btn-danger" onclick="unenrollUserAction(${en.user_id})">Gỡ</button>
+                                    </div>
+                                </div>
+                            `).join('');
+                        }
+                    } catch (err) {
+                        document.getElementById('enrollmentsList').innerHTML = '<p class="muted">Lỗi tải danh sách học viên.</p>';
+                    }
             } catch (error) {
                 showAlert('Lỗi: ' + error.message, 'error');
             }
@@ -158,7 +283,180 @@
                 showAlert('Lỗi: ' + error.message, 'error');
             }
         }
+
+        async function confirmDeleteLesson(lessonId) {
+            if (!confirm('Bạn có chắc muốn xóa bài giảng này?')) return;
+            try {
+                await adminAPI.deleteLesson(lessonId);
+                showAlert('Đã xóa bài giảng', 'success');
+                // reload lessons for current course
+                if (editingCourseId) {
+                    const lessons = await apiRequest(`/admin/courses/${editingCourseId}/lessons`);
+                    const list = document.getElementById('lessonsList');
+                    if (!lessons || lessons.length === 0) {
+                        list.innerHTML = '<p class="muted">Chưa có bài giảng nào.</p>';
+                    } else {
+                        list.innerHTML = lessons.map(ls => `
+                            <div style="padding:8px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
+                                <div style="flex:1;">
+                                    <strong>${ls.lesson_title}</strong>
+                                    <div class="muted" style="font-size:12px">Thời lượng: ${ls.duration_minutes || '-'} phút</div>
+                                </div>
+                                <div style="display:flex; gap:8px; margin-left:12px;">
+                                    <a class="btn btn-sm btn-primary" href="../student/lesson.html?id=${ls.lesson_id}" target="_blank">Xem</a>
+                                    <button class="btn btn-sm btn-danger" onclick="confirmDeleteLesson(${ls.lesson_id})">Xóa</button>
+                                </div>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (error) {
+                showAlert('Lỗi xóa bài giảng: ' + error.message, 'error');
+            }
+        }
+
+        async function enrollUserAction() {
+            const input = document.getElementById('enrollUserInput').value.trim();
+            if (!input) return showAlert('Nhập user id hoặc email để ghi danh', 'error');
+            // try to interpret as id first
+            let userId = parseInt(input);
+            try {
+                if (isNaN(userId)) {
+                    // resolve by email via admin users list
+                    const users = await adminAPI.getUsers();
+                    const found = users.find(u => u.email === input || u.username === input);
+                    if (!found) return showAlert('Không tìm thấy user với email/username này', 'error');
+                    userId = found.user_id;
+                }
+                await apiRequest(`/admin/courses/${editingCourseId}/enroll`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId })
+                });
+                showAlert('Ghi danh thành công', 'success');
+                // reload enrollments
+                const enrolls = await apiRequest(`/admin/courses/${editingCourseId}/enrollments`);
+                const el = document.getElementById('enrollmentsList');
+                if (!enrolls || enrolls.length === 0) el.innerHTML = '<p class="muted">Chưa có học viên nào.</p>';
+                else el.innerHTML = enrolls.map(en => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:6px; border-bottom:1px solid #eee;">
+                        <div>
+                            <strong>ID: ${en.user_id}</strong>
+                            <div class="muted" style="font-size:12px">Progress: ${en.progress_percentage || 0}%</div>
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-danger" onclick="unenrollUserAction(${en.user_id})">Gỡ</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                showAlert('Lỗi ghi danh: ' + err.message, 'error');
+            }
+        }
+
+        async function unenrollUserAction(userId) {
+            if (!confirm('Bạn có chắc muốn gỡ học viên này khỏi khóa?')) return;
+            try {
+                await apiRequest(`/admin/courses/${editingCourseId}/unenroll`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId })
+                });
+                showAlert('Đã gỡ học viên', 'success');
+                // refresh enrollments
+                const enrolls = await apiRequest(`/admin/courses/${editingCourseId}/enrollments`);
+                const el = document.getElementById('enrollmentsList');
+                if (!enrolls || enrolls.length === 0) el.innerHTML = '<p class="muted">Chưa có học viên nào.</p>';
+                else el.innerHTML = enrolls.map(en => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:6px; border-bottom:1px solid #eee;">
+                        <div>
+                            <strong>ID: ${en.user_id}</strong>
+                            <div class="muted" style="font-size:12px">Progress: ${en.progress_percentage || 0}%</div>
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-danger" onclick="unenrollUserAction(${en.user_id})">Gỡ</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                showAlert('Lỗi: ' + err.message, 'error');
+            }
+        }
+
+        async function previewLesson(lessonId) {
+            try {
+                const lesson = await lessonsAPI.getById(lessonId);
+                document.getElementById('lessonPreviewTitle').textContent = lesson.lesson_title;
+                document.getElementById('lessonPreviewContent').innerHTML = marked.parse(lesson.lesson_content || '');
+                document.getElementById('lessonPreview').style.display = 'block';
+                // hide edit form if open
+                document.getElementById('lessonEditForm').style.display = 'none';
+            } catch (err) {
+                showAlert('Lỗi tải nội dung bài giảng: ' + err.message, 'error');
+            }
+        }
+
+        let editingLessonId = null;
+        async function openEditLesson(lessonId) {
+            try {
+                const lesson = await lessonsAPI.getById(lessonId);
+                editingLessonId = lessonId;
+                document.getElementById('editLessonTitle').value = lesson.lesson_title || '';
+                document.getElementById('editLessonDuration').value = lesson.duration_minutes || '';
+                document.getElementById('editLessonContent').value = lesson.lesson_content || '';
+                document.getElementById('lessonEditForm').style.display = 'block';
+                document.getElementById('lessonPreview').style.display = 'none';
+            } catch (err) {
+                showAlert('Lỗi tải bài giảng để sửa: ' + err.message, 'error');
+            }
+        }
+
+        function cancelEditLesson() {
+            editingLessonId = null;
+            document.getElementById('lessonEditForm').style.display = 'none';
+        }
+
+        async function saveEditedLesson() {
+            if (!editingLessonId) return showAlert('Không có bài giảng đang sửa', 'error');
+            const data = {
+                lesson_title: document.getElementById('editLessonTitle').value,
+                lesson_content: document.getElementById('editLessonContent').value,
+                duration_minutes: parseInt(document.getElementById('editLessonDuration').value) || null
+            };
+            try {
+                await adminAPI.updateLesson(editingLessonId, data);
+                showAlert('Cập nhật bài giảng thành công', 'success');
+                // refresh lessons list
+                const lessons = await apiRequest(`/admin/courses/${editingCourseId}/lessons`);
+                const list = document.getElementById('lessonsList');
+                if (!lessons || lessons.length === 0) {
+                    list.innerHTML = '<p class="muted">Chưa có bài giảng nào.</p>';
+                } else {
+                    list.innerHTML = lessons.map(ls => `
+                        <div id="lesson-item-${ls.lesson_id}" data-lesson-id="${ls.lesson_id}" style="padding:8px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;">
+                            <div style="flex:1;">
+                                <strong>${ls.lesson_title}</strong>
+                                <div class="muted" style="font-size:12px">Thời lượng: ${ls.duration_minutes || '-'} phút</div>
+                            </div>
+                            <div style="display:flex; gap:8px; margin-left:12px;">
+                                <button class="btn btn-sm btn-outline" onclick="previewLesson(${ls.lesson_id})">Chi tiết</button>
+                                <button class="btn btn-sm btn-primary" onclick="openEditLesson(${ls.lesson_id})">Sửa</button>
+                                <a class="btn btn-sm btn-success" href="../student/lesson.html?id=${ls.lesson_id}" target="_blank">Mở trang</a>
+                                <button class="btn btn-sm btn-danger" onclick="confirmDeleteLesson(${ls.lesson_id})">Xóa</button>
+                            </div>
+                        </div>
+                    `).join('');
+                }
+                cancelEditLesson();
+            } catch (err) {
+                showAlert('Lỗi lưu bài giảng: ' + err.message, 'error');
+            }
+        }
         
+        // attach search handler
+        const courseSearchInput = document.getElementById('courseSearch');
+        if (courseSearchInput) courseSearchInput.addEventListener('input', () => loadCourses());
+
         loadCourses();
     </script>
 </body>

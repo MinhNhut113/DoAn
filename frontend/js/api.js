@@ -71,7 +71,9 @@ async function apiRequest(endpoint, options = {}) {
     };
     
     if (token) {
-        defaultOptions.headers['Authorization'] = `Bearer ${token}`;
+        // Ensure we don't double-prefix 'Bearer' if token already contains it
+        const rawToken = token.startsWith('Bearer ') ? token.split(' ')[1] : token;
+        defaultOptions.headers['Authorization'] = `Bearer ${rawToken}`;
     }
     
     const config = {
@@ -156,7 +158,7 @@ const lessonsAPI = {
     getByCourse: (courseId) => apiRequest(`/lessons/course/${courseId}`),
     
     getById: (lessonId) => apiRequest(`/lessons/${lessonId}`),
-    
+    getQuiz: (lessonId) => apiRequest(`/lessons/${lessonId}/quiz`),
     complete: (lessonId) => apiRequest(`/lessons/${lessonId}/complete`, {
         method: 'POST'
     })
@@ -219,6 +221,10 @@ const aiAPI = {
     askQuestion: (question, courseId = null) => apiRequest('/ai/chat', { 
         method: 'POST',
         body: JSON.stringify({ message: question, course_id: courseId }) 
+    }),
+    generateLesson: (topic, level = 'beginner') => apiRequest('/ai/generate-lesson', {
+        method: 'POST',
+        body: JSON.stringify({ topic, level })
     })
 };
 

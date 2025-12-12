@@ -1,9 +1,12 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from utils import get_current_user_id
-from models import db, User, Course, Lesson, QuizQuestion, Quiz, Enrollment, QuizResult, Assignment
+from models import db, User, Course, Lesson, QuizQuestion, Quiz, QuizQuestionMapping, AIGeneratedQuestion, GenerationRequest, Enrollment, QuizResult, Assignment
 from functools import wraps
 from datetime import datetime
+import json
+import time
+from backend.ai_models.ai_service import get_ai_service
 
 bp = Blueprint('admin', __name__)
 
@@ -145,6 +148,74 @@ def delete_course(course_id):
         return jsonify({'error': str(e)}), 500
 
 # Lesson Management
+@bp.route('/courses/<int:course_id>/lessons', methods=['GET'])
+@admin_required
+def get_course_lessons_admin(course_id):
+    """Get all lessons for a course (admin access, no enrollment check)"""
+    try:
+        course = Course.query.get(course_id)
+        if not course:
+            return jsonify({'error': 'Course not found'}), 404
+        
+        lessons = Lesson.query.filter_by(course_id=course_id).order_by(Lesson.lesson_order).all()
+        return jsonify([lesson.to_dict() for lesson in lessons]), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Enrollment management for admin
+@bp.route('/courses/<int:course_id>/enrollments', methods=['GET'])
+@admin_required
+def list_enrollments(course_id):
+    try:
+        enrolls = Enrollment.query.filter_by(course_id=course_id).all()
+        return jsonify([{
+            'user_id': e.user_id,
+            'course_id': e.course_id,
+            'progress_percentage': e.progress_percentage
+        } for e in enrolls]), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/courses/<int:course_id>/enroll', methods=['POST'])
+@admin_required
+def enroll_user(course_id):
+    try:
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'user_id required'}), 400
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        existing = Enrollment.query.filter_by(user_id=user_id, course_id=course_id).first()
+        if existing:
+            return jsonify({'message': 'Already enrolled'}), 200
+        enroll = Enrollment(user_id=user_id, course_id=course_id, progress_percentage=0)
+        db.session.add(enroll)
+        db.session.commit()
+        return jsonify({'message': 'User enrolled'}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/courses/<int:course_id>/unenroll', methods=['POST'])
+@admin_required
+def unenroll_user(course_id):
+    try:
+        data = request.get_json() or {}
+        user_id = data.get('user_id')
+        if not user_id:
+            return jsonify({'error': 'user_id required'}), 400
+        enroll = Enrollment.query.filter_by(user_id=user_id, course_id=course_id).first()
+        if not enroll:
+            return jsonify({'error': 'Enrollment not found'}), 404
+        db.session.delete(enroll)
+        db.session.commit()
+        return jsonify({'message': 'User unenrolled'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 @bp.route('/lessons', methods=['POST'])
 @admin_required
 def create_lesson():
@@ -160,7 +231,15 @@ def create_lesson():
         )
         db.session.add(lesson)
         db.session.commit()
-        
+
+        # After lesson is created, automatically generate AI quiz (default 5 MC questions)
+        try:
+            generate_quiz_for_lesson(lesson.lesson_id, num_questions=5)
+        except Exception as e:
+            # Don't fail the request if quiz generation fails - just log
+            import logging
+            logging.getLogger(__name__).exception(f"AI quiz generation failed for lesson {lesson.lesson_id}: {e}")
+
         return jsonify({
             'message': 'Lesson created successfully',
             'lesson': lesson.to_dict()
@@ -189,7 +268,14 @@ def update_lesson(lesson_id):
         
         lesson.updated_at = datetime.utcnow()
         db.session.commit()
-        
+
+        # After lesson update, regenerate AI quiz (replace existing auto-generated quiz)
+        try:
+            generate_quiz_for_lesson(lesson.lesson_id, num_questions=5)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).exception(f"AI quiz generation failed for lesson update {lesson.lesson_id}: {e}")
+
         return jsonify({
             'message': 'Lesson updated successfully',
             'lesson': lesson.to_dict()
@@ -241,6 +327,26 @@ def create_question():
         }), 201
     except Exception as e:
         db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/questions', methods=['GET'])
+@admin_required
+def list_questions():
+    try:
+        questions = QuizQuestion.query.all()
+        return jsonify([q.to_dict(include_answer=False) for q in questions]), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@bp.route('/questions/<int:question_id>', methods=['GET'])
+@admin_required
+def get_question(question_id):
+    try:
+        q = QuizQuestion.query.get(question_id)
+        if not q:
+            return jsonify({'error': 'Question not found'}), 404
+        return jsonify(q.to_dict(include_answer=True)), 200
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @bp.route('/questions/<int:question_id>', methods=['PUT'])
@@ -356,4 +462,182 @@ def get_statistics():
         logger = logging.getLogger(__name__)
         logger.error(f"[ADMIN] Error getting statistics: {str(e)}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
+
+def generate_quiz_for_lesson(lesson_id: int, num_questions: int = 5):
+    """Generate a multiple-choice quiz for a lesson using AI and save as a Quiz with mappings."""
+    ai = get_ai_service()
+    lesson = Lesson.query.get(lesson_id)
+    if not lesson:
+        raise ValueError('Lesson not found')
+        # Build a stricter prompt for AI: extract key points and create one MC question per key point
+        prompt = f"""
+Bạn là một trợ lý tạo câu hỏi kiểm tra (quiz) cho bài giảng. Nhiệm vụ: 1) Rút ra {num_questions} điểm chính (key points) từ bài học; 2) Sinh chính xác MỘT câu hỏi Multiple Choice cho mỗi điểm chính.
+
+Yêu cầu định dạng đầu ra (CHÍNH XÁC JSON, KHÔNG THÊM VĂN BẢN):
+Trả về một JSON array gồm {num_questions} objects. Mỗi object phải có các trường:
+    - key_point: chuỗi ngắn mô tả điểm chính (10-30 từ)
+    - question_text: chuỗi (nội dung câu hỏi liên quan trực tiếp tới key_point)
+    - options: mảng các chuỗi (3 hoặc 4 lựa chọn)
+    - correct_answer: số nguyên (index bắt đầu từ 0)
+    - difficulty_level: số nguyên 1-5 (tùy chọn)
+    - explanation: chuỗi ngắn (tùy chọn) giải thích tại sao đáp án đúng
+
+Ví dụ hợp lệ (2 phần tử):
+[
+    {"key_point":"Thẻ <a> dùng để tạo liên kết","question_text":"Thẻ HTML nào dùng để tạo liên kết?","options":["<a>","<p>","<div>"],"correct_answer":0},
+    {"key_point":"Thẻ <h1> là tiêu đề lớn nhất","question_text":"Thẻ nào thường dùng cho tiêu đề lớn nhất?","options":["<h1>","<h3>","<span>"],"correct_answer":0}
+]
+
+Bài học (title và nội dung):
+Title: {lesson.lesson_title}
+Content: {lesson.lesson_content or ''}
+
+Trả về CHÍNH XÁC JSON array gồm {num_questions} phần tử, mỗi phần tử chứa `key_point` và một câu hỏi tương ứng.
+"""
+
+    raw = ai.generate_response(prompt)
+    if not raw:
+        raise RuntimeError('AI returned no response')
+
+    # Preserve raw response for auditing
+    raw_response = raw
+
+    # Try parse JSON robustly
+    questions = None
+    try:
+        questions = json.loads(raw)
+    except Exception:
+        # Try to extract the first JSON array substring
+        import re
+        m = re.search(r"\[\s*\{.*?\}\s*\]", raw, re.DOTALL)
+        if m:
+            try:
+                questions = json.loads(m.group())
+            except Exception:
+                # Attempt to balance braces heuristically
+                start = raw.find('[')
+                end = raw.rfind(']')
+                if start != -1 and end != -1 and end > start:
+                    questions = json.loads(raw[start:end+1])
+        if questions is None:
+            raise RuntimeError('Failed to parse JSON from AI response')
+
+    # Validate and normalize questions (expecting key_point present)
+    clean_questions = []
+    for i, q in enumerate(questions[:num_questions]):
+        # prefer to associate question with a key_point
+        key_point = q.get('key_point') or q.get('point') or ''
+        qt = q.get('question_text') or q.get('question') or ''
+        opts = q.get('options') or []
+        # If options are a string (comma separated), try split
+        if isinstance(opts, str):
+            opts = [o.strip() for o in opts.split(',') if o.strip()]
+
+        if not isinstance(opts, list):
+            opts = []
+
+        # Ensure at least 2 options
+        if len(opts) < 2:
+            # Skip invalid question
+            continue
+
+        # Determine correct answer index
+        corr = q.get('correct_answer')
+        if isinstance(corr, str):
+            # Accept letter e.g. 'A' or 'a' or textual answer - map to index
+            corr_str = corr.strip()
+            if len(corr_str) == 1 and corr_str.isalpha():
+                corr_idx = ord(corr_str.upper()) - ord('A')
+            else:
+                try:
+                    corr_idx = int(corr_str)
+                except Exception:
+                    corr_idx = 0
+        else:
+            try:
+                corr_idx = int(corr) if corr is not None else 0
+            except Exception:
+                corr_idx = 0
+
+        if corr_idx < 0 or corr_idx >= len(opts):
+            # If out of range, fallback to 0
+            corr_idx = 0
+
+        difficulty = q.get('difficulty_level') or q.get('difficulty') or 1
+        try:
+            difficulty = int(difficulty)
+        except Exception:
+            difficulty = 1
+
+        explanation = q.get('explanation') or q.get('explain') or None
+
+        clean_questions.append({
+            'key_point': key_point,
+            'question_text': qt,
+            'options': opts,
+            'correct_answer': corr_idx,
+            'difficulty_level': max(1, min(5, difficulty)),
+            'explanation': explanation
+        })
+
+    if len(clean_questions) == 0:
+        raise RuntimeError('No valid questions parsed from AI response')
+
+    # Create a Quiz for this lesson (name includes lesson id for lookup)
+    quiz_name = f"LessonQuiz:{lesson.lesson_id}:{lesson.lesson_title[:80]}"
+    quiz = Quiz(quiz_name=quiz_name, course_id=lesson.course_id, topic_id=None)
+    db.session.add(quiz)
+    db.session.commit()
+
+    created_question_ids = []
+    order = 1
+    for q in clean_questions[:num_questions]:
+        qq = QuizQuestion(
+            topic_id=None,
+            course_id=lesson.course_id,
+            question_text=q['question_text'],
+            question_type='multiple_choice',
+            options=json.dumps(q['options']),
+            correct_answer=int(q['correct_answer']),
+            explanation=q.get('explanation'),
+            difficulty_level=int(q.get('difficulty_level', 1))
+        )
+        db.session.add(qq)
+        db.session.commit()
+
+        mapping = QuizQuestionMapping(quiz_id=quiz.quiz_id, question_id=qq.question_id, question_order=order)
+        db.session.add(mapping)
+        db.session.commit()
+
+        created_question_ids.append(qq.question_id)
+        order += 1
+
+    # Record generation request including raw response for auditing
+    try:
+        gen = GenerationRequest(
+            user_id=None,
+            request_type='question_generation',
+            topic_id=None,
+            course_id=lesson.course_id,
+            lesson_id=lesson.lesson_id,
+            input_prompt=prompt,
+            request_params=json.dumps({'num_questions': num_questions}),
+            status='completed',
+            result_ids=json.dumps({'quiz_id': quiz.quiz_id, 'question_ids': created_question_ids}),
+            error_message=None,
+            processing_time_seconds=0.0,
+            completed_at=datetime.utcnow()
+        )
+        # save raw response into error_message field if necessary (or extend model)
+        try:
+            gen.error_message = f"AI raw response: {raw_response[:2000]}"
+        except Exception:
+            pass
+        db.session.add(gen)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    return quiz.quiz_id
 

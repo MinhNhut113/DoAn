@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bài Học</title>
     <link rel="stylesheet" href="../css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
     <div class="navbar">
@@ -42,39 +43,72 @@
         }
         
         async function loadLesson() {
+            if (!lessonId) {
+                document.getElementById('lessonContent').innerHTML = '<p style="color: red;">Không tìm thấy bài học. Vui lòng quay lại và chọn bài học hợp lệ.</p>';
+                return;
+            }
             try {
+                console.log('Đang tải bài học ID:', lessonId);
                 lesson = await lessonsAPI.getById(lessonId);
+                console.log('Bài học đã tải:', lesson);
                 renderLesson();
             } catch (error) {
+                console.error('Lỗi chi tiết:', error);
                 showAlert('Lỗi tải bài học: ' + error.message, 'error');
+                document.getElementById('lessonContent').innerHTML = `<p style="color: red;">Lỗi tải bài học: ${error.message}</p>`;
             }
         }
         
         function renderLesson() {
             const container = document.getElementById('lessonContent');
             
+            if (!lesson) {
+                container.innerHTML = '<p style="color: red;">Không có dữ liệu bài học.</p>';
+                return;
+            }
+            
+            // Render Markdown content if available
+            let contentHtml = 'Nội dung bài học sẽ được cập nhật sớm.';
+            if (lesson.lesson_content) {
+                try {
+                    contentHtml = marked.parse(lesson.lesson_content);
+                } catch (e) {
+                    console.error('Lỗi parse Markdown:', e);
+                    contentHtml = lesson.lesson_content.replace(/\n/g, '<br>');
+                }
+            }
+            
             container.innerHTML = `
-                <h1>${lesson.lesson_title}</h1>
+                <div style="margin-bottom: 1rem;">
+                    <a href="courses.html" style="color: #5b5fcf; text-decoration: none;">← Quay lại danh sách khóa học</a>
+                </div>
+                <h1>${lesson.lesson_title || 'Không xác định'}</h1>
                 ${lesson.video_url ? `
                     <div style="margin: 2rem 0;">
-                        <video controls style="width: 100%; max-width: 800px; border-radius: 10px;">
+                        <video controls style="width: 100%; max-width: 100%; border-radius: 10px;">
                             <source src="${lesson.video_url}" type="video/mp4">
                             Trình duyệt không hỗ trợ video.
                         </video>
                     </div>
                 ` : ''}
-                <div style="margin-top: 2rem; line-height: 1.8;">
-                    ${lesson.lesson_content ? lesson.lesson_content.replace(/\n/g, '<br>') : 'Nội dung bài học sẽ được cập nhật sớm.'}
+                <div class="lesson-markdown" style="margin-top: 2rem; line-height: 1.8; font-size: 16px;">
+                    ${contentHtml}
                 </div>
                 ${lesson.is_completed ? `
                     <div class="alert alert-success" style="margin-top: 2rem;">
                         ✓ Bạn đã hoàn thành bài học này!
                     </div>
+                    <div id="lessonQuizArea" style="margin-top: 1rem;"></div>
                 ` : ''}
             `;
             
             if (!lesson.is_completed) {
                 document.getElementById('completeBtn').style.display = 'inline-block';
+            }
+            
+            // If already completed, check for quiz
+            if (lesson.is_completed) {
+                checkForQuizAndRender();
             }
         }
         
@@ -84,8 +118,23 @@
                 showAlert('Đã đánh dấu hoàn thành!', 'success');
                 document.getElementById('completeBtn').style.display = 'none';
                 loadLesson();
+                // After marking complete, check for quiz
+                setTimeout(() => checkForQuizAndRender(), 500);
             } catch (error) {
                 showAlert('Lỗi: ' + error.message, 'error');
+            }
+        }
+
+        async function checkForQuizAndRender() {
+            try {
+                const res = await lessonsAPI.getQuiz(lessonId);
+                if (res && res.quiz) {
+                    const area = document.getElementById('lessonQuizArea');
+                    area.innerHTML = `<a class="btn btn-primary" href="/student/quiz.html?id=${res.quiz.quiz_id}">Làm bài kiểm tra cho bài học này</a>`;
+                }
+            } catch (err) {
+                // If 404 or no quiz, ignore
+                console.debug('No quiz for lesson or error:', err.message || err);
             }
         }
         

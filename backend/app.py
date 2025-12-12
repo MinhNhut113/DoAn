@@ -71,7 +71,7 @@ def log_auth_header():
 
 # Import routes
 from routes import auth, courses, lessons, quizzes, progress, admin, ai_recommendations, ai_chat, ai_questions, incorrect_answers, ai_compat
-
+from routes import ai_lessons
 # Register blueprints
 app.register_blueprint(auth.bp, url_prefix='/api/auth')
 app.register_blueprint(courses.bp, url_prefix='/api/courses')
@@ -84,7 +84,7 @@ app.register_blueprint(ai_chat.bp, url_prefix='/api/ai')
 app.register_blueprint(ai_questions.bp, url_prefix='/api/ai')
 app.register_blueprint(ai_compat.bp, url_prefix='/api/ai')
 app.register_blueprint(incorrect_answers.bp, url_prefix='')
-
+app.register_blueprint(ai_lessons.bp, url_prefix='/api/ai')
 
 # Sanity check for duplicate URL rules (warn only)
 def _detect_duplicate_routes(application):
