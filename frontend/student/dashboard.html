@@ -210,8 +210,8 @@
         
         async function loadRecommendations() {
             try {
-                await aiAPI.generate();
-                const recommendations = await aiAPI.getRecommendations(null, false);
+                const response = await aiAPI.getRecommendations(null, false);
+                const recommendations = response.recommendations || [];
                 
                 const container = document.getElementById('recommendations');
                 
@@ -222,9 +222,9 @@
                 
                 container.innerHTML = recommendations.slice(0, 5).map(rec => `
                     <div style="padding: 1rem; margin-bottom: 1rem; background: var(--light-color); border-radius: 5px;">
-                        <strong>${rec.content?.title || 'Nội dung được đề xuất'}</strong>
+                        <strong>${rec.lesson_title || 'Nội dung được đề xuất'}</strong>
                         <p style="margin-top: 0.5rem; color: #6b7280;">${rec.reason}</p>
-                        ${rec.content_type === 'lesson' ? `<a href="lesson.html?id=${rec.content_id}" class="btn btn-primary" style="margin-top: 0.5rem;">Xem Bài Học</a>` : ''}
+                        <a href="lesson.html?id=${rec.lesson_id}" class="btn btn-primary" style="margin-top: 0.5rem;">Xem Bài Học</a>
                     </div>
                 `).join('');
             } catch (error) {
