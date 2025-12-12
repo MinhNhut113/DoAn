@@ -6,6 +6,15 @@
     <title>Bài Học</title>
     <link rel="stylesheet" href="../css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // Configure marked.js for Vietnamese text
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            headerIds: false,
+            mangle: false
+        });
+    </script>
 </head>
 <body>
     <div class="navbar">
@@ -79,11 +88,18 @@
             // Render Markdown content if available
             let contentHtml = 'Nội dung bài học sẽ được cập nhật sớm.';
             if (lesson.lesson_content) {
+                console.log('Lesson content received:', lesson.lesson_content);
+                
+                // Fix corrupted Vietnamese characters
+                let fixedContent = fixVietnameseText(lesson.lesson_content);
+                console.log('Fixed content:', fixedContent);
+                
                 try {
-                    contentHtml = marked.parse(lesson.lesson_content);
+                    contentHtml = marked.parse(fixedContent);
+                    console.log('Parsed HTML:', contentHtml);
                 } catch (e) {
                     console.error('Lỗi parse Markdown:', e);
-                    contentHtml = lesson.lesson_content.replace(/\n/g, '<br>');
+                    contentHtml = fixedContent.replace(/\n/g, '<br>');
                 }
             }
             
@@ -147,7 +163,7 @@
                         </div>
                     `;
                 })() : ''}
-                <div class="lesson-markdown" style="margin-top: 2rem; line-height: 1.8; font-size: 16px;">
+                <div class="lesson-markdown" style="margin-top: 2rem; line-height: 1.8; font-size: 16px; font-family: 'Segoe UI', Tahoma, 'Microsoft Sans Serif', Arial, sans-serif;">
                     ${contentHtml}
                 </div>
                 ${assignmentHtml}
@@ -169,6 +185,67 @@
             }
         }
         
+        function fixVietnameseText(text) {
+            if (!text) return text;
+            
+            // Common corruption patterns and their fixes
+            const fixes = {
+                'D?ng': 'Động',
+                'd?ng': 'động',
+                'Gi?i': 'Giới', 
+                'gi?i': 'giới',
+                'Th?u': 'Thế',
+                'th?u': 'thế',
+                'N?n': 'Nền',
+                'n?n': 'nền',
+                'Chào m?ng': 'Chào mừng',
+                'chào m?ng': 'chào mừng',
+                'M?c': 'Mục',
+                'm?c': 'mục',
+                'Tiêu d?': 'Tiêu đề',
+                'tiêu d?': 'tiêu đề',
+                'N?i': 'Nội',
+                'n?i': 'nội',
+                'Dung': 'Dung',
+                'dung': 'dung',
+                'Bài h?c': 'Bài học',
+                'bài h?c': 'bài học',
+                'Trình duy?t': 'Trình duyệt',
+                'trình duy?t': 'trình duyệt',
+                'Ngôn ng?': 'Ngôn ngữ',
+                'ngôn ng?': 'ngôn ngữ',
+                'L?p': 'Lập',
+                'l?p': 'lập',
+                'Trình': 'Trình',
+                'trình': 'trình',
+                'D?ch': 'Dịch',
+                'd?ch': 'dịch',
+                'Th?c': 'Thực',
+                'th?c': 'thực',
+                'Hi?n': 'Hiện',
+                'hi?n': 'hiện',
+                'Th?': 'Thế',
+                'th?': 'thế',
+                'C?a': 'Của',
+                'c?a': 'của',
+                'T?i': 'Tại',
+                't?i': 'tại',
+                'Sao': 'Sao',
+                'sao': 'sao',
+                'H?c': 'Học',
+                'h?c': 'học',
+                'Python': 'Python',
+                'python': 'python'
+            };
+            
+            let fixedText = text;
+            for (const [wrong, correct] of Object.entries(fixes)) {
+                fixedText = fixedText.replace(new RegExp(wrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), correct);
+            }
+            
+            return fixedText;
+        }
+
         async function completeLesson() {
             try {
                 await lessonsAPI.complete(lessonId);

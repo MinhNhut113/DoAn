@@ -27,6 +27,10 @@ app = Flask(__name__,
     template_folder=str(FRONTEND_DIR))
 app.config.from_object(Config)
 
+# Configure UTF-8 encoding for JSON responses
+app.config['JSON_AS_ASCII'] = False
+app.json.ensure_ascii = False
+
 # Do NOT log secret values. Only log presence/absence to avoid leaking secrets in logs.
 if app.config.get('JWT_SECRET_KEY'):
     logger.info("[APP] JWT configured")
@@ -41,6 +45,27 @@ CORS(app)
 
 # Initialize JWT
 jwt = JWTManager(app)
+
+@app.before_request
+def before_request():
+    """Ensure UTF-8 encoding for all responses"""
+    pass
+
+@app.after_request
+def after_request(response):
+    """Add UTF-8 charset to all responses and prevent caching for development"""
+    if 'charset' not in response.headers.get('Content-Type', '').lower():
+        if response.headers.get('Content-Type', '').startswith('application/json'):
+            response.headers['Content-Type'] = 'application/json; charset=utf-8'
+        elif response.headers.get('Content-Type', '').startswith('text/html'):
+            response.headers['Content-Type'] = 'text/html; charset=utf-8'
+    
+    # Prevent caching during development
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    
+    return response
 
 @jwt.expired_token_loader
 def expired_token_callback(jwt_header, jwt_payload):

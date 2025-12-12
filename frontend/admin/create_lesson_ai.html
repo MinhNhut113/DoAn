@@ -6,6 +6,15 @@
     <title>AI Tạo Bài Giảng - Admin</title>
     <link rel="stylesheet" href="../css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // Configure marked.js for Vietnamese text
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            headerIds: false,
+            mangle: false
+        });
+    </script>
 </head>
 <body>
     <div class="navbar">
@@ -70,7 +79,7 @@
                     </div>
                     <div class="form-group">
                         <label>Xem trước:</label>
-                        <div id="previewContent" style="border: 1px solid #ddd; padding: 15px; border-radius: 5px; background: #f9f9f9; max-height: 300px; overflow-y: auto;"></div>
+                        <div id="previewContent" style="border: 1px solid #ddd; padding: 15px; border-radius: 5px; background: #f9f9f9; max-height: 300px; overflow-y: auto; font-family: 'Segoe UI', Tahoma, 'Microsoft Sans Serif', Arial, sans-serif; line-height: 1.6;"></div>
                     </div>
                     <button onclick="saveLesson()" class="btn btn-success" style="width: 100%;">💾 Lưu bài học này</button>
                 </div>

@@ -62,6 +62,11 @@ def get_lesson(lesson_id):
         
         lesson_data = lesson.to_dict()
         
+        # Debug logging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Lesson content for ID {lesson_id}: {repr(lesson_data.get('lesson_content', '')[:100])}")
+        
         # Only track progress for non-admin users
         if not is_admin:
             progress = LessonProgress.query.filter_by(user_id=user_id, lesson_id=lesson_id).first()

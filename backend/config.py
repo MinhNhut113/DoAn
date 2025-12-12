@@ -19,12 +19,18 @@ class Config:
             f"mssql+pyodbc://{SQL_SERVER}/{SQL_DATABASE}"
             f"?driver={SQL_DRIVER.replace(' ', '+')}"
             f"&trusted_connection=yes"
+            f"&charset=utf8"
+            f"&encoding=utf8"
+            f"&autocommit=True"
             f"&timeout=10"
         )
     else:
         SQLALCHEMY_DATABASE_URI = (
             f"mssql+pyodbc://{SQL_USERNAME}:{SQL_PASSWORD}@{SQL_SERVER}/{SQL_DATABASE}"
             f"?driver={SQL_DRIVER.replace(' ', '+')}"
+            f"&charset=utf8"
+            f"&encoding=utf8"
+            f"&autocommit=True"
             f"&timeout=10"
         )
     
