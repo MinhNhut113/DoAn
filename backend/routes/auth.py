@@ -3,6 +3,8 @@ from flask_jwt_extended import create_access_token, jwt_required
 from utils import get_current_user_id
 from models import db, User
 from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import random
 
 bp = Blueprint('auth', __name__)
 
@@ -110,6 +112,8 @@ def update_profile():
             user.email = data['email']
         if 'avatar_url' in data:
             user.avatar_url = data['avatar_url']
+        if 'learning_goal' in data:
+            user.learning_goal = data['learning_goal']
         
         user.updated_at = datetime.now(timezone.utc)
         db.session.commit()
@@ -151,6 +155,71 @@ def change_password():
             'message': 'Password changed successfully'
         }), 200
         
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# ----------------- Forgot / Reset Password -----------------
+@bp.route('/forgot-password', methods=['POST'])
+def forgot_password():
+    try:
+        data = request.get_json() or {}
+        email = data.get('email')
+        if not email:
+            return jsonify({'error': 'Email is required'}), 400
+
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            # Don't reveal whether email exists; respond success for privacy
+            return jsonify({'message': 'If the email exists, a reset token has been sent'}), 200
+
+        # generate 6-digit token
+        token = f"{random.randint(0, 999999):06d}"
+        expiry = datetime.utcnow() + timedelta(minutes=15)
+
+        user.reset_token = token
+        user.reset_token_expiry = expiry
+        db.session.commit()
+
+        # Print token to server console (no SMTP configured)
+        print(f'RESET TOKEN FOR {email}: {token}')
+
+        return jsonify({'message': 'If the email exists, a reset token has been sent'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/reset-password', methods=['POST'])
+def reset_password():
+    try:
+        data = request.get_json() or {}
+        email = data.get('email')
+        token = data.get('token')
+        new_password = data.get('new_password')
+
+        if not all([email, token, new_password]):
+            return jsonify({'error': 'email, token and new_password are required'}), 400
+
+        user = User.query.filter_by(email=email).first()
+        if not user:
+            return jsonify({'error': 'Invalid token or email'}), 400
+
+        if not user.reset_token or not user.reset_token_expiry:
+            return jsonify({'error': 'No reset requested for this account'}), 400
+
+        now = datetime.utcnow()
+        if user.reset_token != str(token) or user.reset_token_expiry < now:
+            return jsonify({'error': 'Invalid or expired token'}), 400
+
+        # Set new password and clear token
+        user.set_password(new_password)
+        user.reset_token = None
+        user.reset_token_expiry = None
+        user.updated_at = datetime.now(timezone.utc)
+        db.session.commit()
+
+        return jsonify({'message': 'Password reset successful'}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500

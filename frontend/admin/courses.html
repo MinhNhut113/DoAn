@@ -89,6 +89,10 @@
                         <input type="number" id="editLessonDuration" class="form-control">
                     </div>
                     <div class="form-group">
+                        <label>Video URL (YouTube hoặc MP4)</label>
+                        <input type="url" id="editLessonVideo" class="form-control" placeholder="https://www.youtube.com/watch?v=... hoặc link mp4">
+                    </div>
+                    <div class="form-group">
                         <label>Nội dung (Markdown)</label>
                         <textarea id="editLessonContent" rows="8" class="form-control"></textarea>
                     </div>
@@ -387,7 +391,20 @@
             try {
                 const lesson = await lessonsAPI.getById(lessonId);
                 document.getElementById('lessonPreviewTitle').textContent = lesson.lesson_title;
-                document.getElementById('lessonPreviewContent').innerHTML = marked.parse(lesson.lesson_content || '');
+                // Render video if present (YouTube embed or video tag)
+                let contentHtml = '';
+                if (lesson.video_url) {
+                    const vid = lesson.video_url;
+                    const ytMatch = vid.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+                    if (ytMatch) {
+                        const vidId = ytMatch[1];
+                        contentHtml += `<div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:6px;margin-bottom:12px;"><iframe src="https://www.youtube.com/embed/${vidId}" frameborder="0" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe></div>`;
+                    } else {
+                        contentHtml += `<div style="margin:12px 0;"><video controls style="width:100%;border-radius:6px;"><source src="${vid}"></video></div>`;
+                    }
+                }
+                contentHtml += marked.parse(lesson.lesson_content || '');
+                document.getElementById('lessonPreviewContent').innerHTML = contentHtml;
                 document.getElementById('lessonPreview').style.display = 'block';
                 // hide edit form if open
                 document.getElementById('lessonEditForm').style.display = 'none';
@@ -403,6 +420,7 @@
                 editingLessonId = lessonId;
                 document.getElementById('editLessonTitle').value = lesson.lesson_title || '';
                 document.getElementById('editLessonDuration').value = lesson.duration_minutes || '';
+                document.getElementById('editLessonVideo').value = lesson.video_url || '';
                 document.getElementById('editLessonContent').value = lesson.lesson_content || '';
                 document.getElementById('lessonEditForm').style.display = 'block';
                 document.getElementById('lessonPreview').style.display = 'none';
@@ -421,7 +439,8 @@
             const data = {
                 lesson_title: document.getElementById('editLessonTitle').value,
                 lesson_content: document.getElementById('editLessonContent').value,
-                duration_minutes: parseInt(document.getElementById('editLessonDuration').value) || null
+                duration_minutes: parseInt(document.getElementById('editLessonDuration').value) || null,
+                video_url: (document.getElementById('editLessonVideo').value || null)
             };
             try {
                 await adminAPI.updateLesson(editingLessonId, data);

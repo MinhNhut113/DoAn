@@ -190,6 +190,12 @@
                                 }).join('')}
                             </ul>
                             ${ans.explanation ? `<p style="margin-top: 1rem; color: #6b7280;"><strong>Giải thích:</strong> ${ans.explanation}</p>` : ''}
+                            ${!ans.is_correct && ans.ai_explanation ? `
+                                <div style="margin-top: 1rem; padding: 12px 16px; background-color: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;">
+                                    <strong style="color: #d97706;">💡 AI Giải Thích:</strong>
+                                    <p style="margin-top: 8px; color: #78350f;">${ans.ai_explanation}</p>
+                                </div>
+                            ` : ''}
                         </div>
                     `;
                 }).join('')}

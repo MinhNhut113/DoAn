@@ -70,7 +70,7 @@ def log_auth_header():
             logger.info(f"[DEBUG] Incoming Authorization header: {auth_header}")
 
 # Import routes
-from routes import auth, courses, lessons, quizzes, progress, admin, ai_recommendations, ai_chat, ai_questions, incorrect_answers, ai_compat
+from routes import auth, courses, lessons, quizzes, progress, admin, ai_recommendations, ai_chat, ai_questions, incorrect_answers, ai_compat, notifications, assignments
 from routes import ai_lessons
 # Register blueprints
 app.register_blueprint(auth.bp, url_prefix='/api/auth')
@@ -79,6 +79,8 @@ app.register_blueprint(lessons.bp, url_prefix='/api/lessons')
 app.register_blueprint(quizzes.bp, url_prefix='/api/quizzes')
 app.register_blueprint(progress.bp, url_prefix='/api/progress')
 app.register_blueprint(admin.bp, url_prefix='/api/admin')
+app.register_blueprint(notifications.bp, url_prefix='/api/notifications')
+app.register_blueprint(assignments.bp, url_prefix='/api/assignments')
 app.register_blueprint(ai_recommendations.bp, url_prefix='/api/recommendations')
 app.register_blueprint(ai_chat.bp, url_prefix='/api/ai')
 app.register_blueprint(ai_questions.bp, url_prefix='/api/ai')

@@ -51,7 +51,16 @@
                 console.log('Đang tải bài học ID:', lessonId);
                 lesson = await lessonsAPI.getById(lessonId);
                 console.log('Bài học đã tải:', lesson);
-                renderLesson();
+                
+                // Load assignment for this lesson if exists
+                let assignmentData = null;
+                try {
+                    assignmentData = await assignmentsAPI.getForLesson(lessonId);
+                } catch (e) {
+                    console.debug('No assignment for lesson or error:', e.message);
+                }
+                
+                renderLesson(assignmentData);
             } catch (error) {
                 console.error('Lỗi chi tiết:', error);
                 showAlert('Lỗi tải bài học: ' + error.message, 'error');
@@ -59,7 +68,7 @@
             }
         }
         
-        function renderLesson() {
+        function renderLesson(assignmentData) {
             const container = document.getElementById('lessonContent');
             
             if (!lesson) {
@@ -78,22 +87,70 @@
                 }
             }
             
+            // Assignment submission section if exists
+            let assignmentHtml = '';
+            if (assignmentData && assignmentData.assignment) {
+                const assign = assignmentData.assignment;
+                const submission = assignmentData.submission;
+                
+                assignmentHtml = `
+                    <div style="margin-top: 2rem; padding: 16px; background: #f0f9ff; border-radius: 8px; border-left: 4px solid #0284c7;">
+                        <h3>📝 Bài Tập: ${assign.assignment_title}</h3>
+                        <p style="margin: 8px 0; color: #666;">${assign.assignment_description || ''}</p>
+                        ${assign.due_date ? `<p style="margin: 8px 0; color: #d97706;"><strong>Hạn nộp:</strong> ${new Date(assign.due_date).toLocaleString('vi-VN')}</p>` : ''}
+                        
+                        ${submission ? `
+                            <div style="margin-top: 12px; padding: 12px; background: white; border-radius: 4px;">
+                                <p><strong>✓ Bạn đã nộp bài</strong></p>
+                                <p style="color: #666; margin-top: 8px;"><strong>Nội dung:</strong> ${submission.submission_content || '(Không có)'}</p>
+                                ${submission.file_url ? `<p style="color: #666;"><strong>File:</strong> <a href="${submission.file_url}" target="_blank">${submission.file_url}</a></p>` : ''}
+                                <p style="color: #666;"><strong>Ngày nộp:</strong> ${new Date(submission.submitted_at).toLocaleString('vi-VN')}</p>
+                                ${submission.score !== null ? `<p style="color: #16a34a;"><strong>Điểm:</strong> ${submission.score}/${assign.max_score}</p>` : '<p style="color: #f59e0b;"><strong>Trạng thái:</strong> Chưa được chấm điểm</p>'}
+                                ${submission.feedback ? `<p style="margin-top: 8px; color: #666;"><strong>Nhận xét:</strong> ${submission.feedback}</p>` : ''}
+                                <button class="btn btn-sm" onclick="toggleAssignmentForm(${assign.assignment_id})">Nộp lại</button>
+                            </div>
+                        ` : `
+                            <div id="assignmentForm" style="margin-top: 12px;">
+                                <textarea id="assignmentContent" placeholder="Nhập nội dung bài tập..." style="width: 100%; height: 150px; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-family: monospace; margin-bottom: 8px;"></textarea>
+                                <input type="text" id="assignmentFileUrl" placeholder="Link file (ví dụ: https://drive.google.com/...)" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 8px;" />
+                                <button class="btn btn-primary" onclick="submitAssignment(${assign.assignment_id})">Nộp Bài</button>
+                            </div>
+                        `}
+                    </div>
+                `;
+            }
+            
             container.innerHTML = `
                 <div style="margin-bottom: 1rem;">
                     <a href="courses.html" style="color: #5b5fcf; text-decoration: none;">← Quay lại danh sách khóa học</a>
                 </div>
                 <h1>${lesson.lesson_title || 'Không xác định'}</h1>
-                ${lesson.video_url ? `
-                    <div style="margin: 2rem 0;">
-                        <video controls style="width: 100%; max-width: 100%; border-radius: 10px;">
-                            <source src="${lesson.video_url}" type="video/mp4">
-                            Trình duyệt không hỗ trợ video.
-                        </video>
-                    </div>
-                ` : ''}
+                ${lesson.video_url ? (() => {
+                    // detect youtube link
+                    const vid = lesson.video_url;
+                    const ytMatch = vid.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{6,})/);
+                    if (ytMatch) {
+                        const vidId = ytMatch[1];
+                        return `
+                            <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:10px;margin:2rem 0;">
+                                <iframe src="https://www.youtube.com/embed/${vidId}" frameborder="0" allowfullscreen style="position:absolute;top:0;left:0;width:100%;height:100%;"></iframe>
+                            </div>
+                        `;
+                    }
+                    // fallback to video tag
+                    return `
+                        <div style="margin: 2rem 0;">
+                            <video controls style="width: 100%; max-width: 100%; border-radius: 10px;">
+                                <source src="${lesson.video_url}" type="video/mp4">
+                                Trình duyệt không hỗ trợ video.
+                            </video>
+                        </div>
+                    `;
+                })() : ''}
                 <div class="lesson-markdown" style="margin-top: 2rem; line-height: 1.8; font-size: 16px;">
                     ${contentHtml}
                 </div>
+                ${assignmentHtml}
                 ${lesson.is_completed ? `
                     <div class="alert alert-success" style="margin-top: 2rem;">
                         ✓ Bạn đã hoàn thành bài học này!
@@ -135,6 +192,35 @@
             } catch (err) {
                 // If 404 or no quiz, ignore
                 console.debug('No quiz for lesson or error:', err.message || err);
+            }
+        }
+
+        function toggleAssignmentForm(assignmentId) {
+            const form = document.getElementById('assignmentForm');
+            if (form.style.display === 'none') {
+                form.style.display = 'block';
+            } else {
+                form.style.display = 'none';
+            }
+        }
+
+        async function submitAssignment(assignmentId) {
+            try {
+                const content = document.getElementById('assignmentContent')?.value || '';
+                const fileUrl = document.getElementById('assignmentFileUrl')?.value || '';
+                
+                if (!content && !fileUrl) {
+                    showAlert('Vui lòng nhập nội dung hoặc đính kèm file', 'error');
+                    return;
+                }
+                
+                const result = await assignmentsAPI.submit(assignmentId, content, fileUrl);
+                showAlert('Nộp bài tập thành công!', 'success');
+                
+                // Reload lesson to show updated submission status
+                setTimeout(() => loadLesson(), 1000);
+            } catch (error) {
+                showAlert('Lỗi nộp bài: ' + error.message, 'error');
             }
         }
         

@@ -15,8 +15,14 @@ class AIServiceConfig:
         
         self.gemini_api_key = os.getenv('GEMINI_API_KEY')
         self.gemini_model = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash')
-        
-        self.ai_provider = os.getenv('AI_PROVIDER', 'gemini').lower()
+
+        # Anthropic / Claude settings
+        self.claude_api_key = os.getenv('CLAUDE_API_KEY')
+        # Default to Haiku 4.5 as requested
+        self.claude_model = os.getenv('CLAUDE_MODEL', 'claude-haiku-4.5')
+
+        # Default provider - set to 'claude' to enable Claude Haiku 4.5 for clients
+        self.ai_provider = os.getenv('AI_PROVIDER', 'claude').lower()
         self.temperature = float(os.getenv('AI_TEMPERATURE', '0.7'))
         self.max_tokens = int(os.getenv('AI_MAX_TOKENS', '2000'))
         
@@ -184,8 +190,107 @@ class GoogleGeminiService:
             logger.error(f"[AI] Gemini lesson error: {e}")
             return None
 
+    def generate_explanation(self, question_text: str, user_answer: str, correct_answer: str) -> Optional[str]:
+        """Generate AI explanation for why an answer is wrong"""
+        if not self.client:
+            return None
+        try:
+            prompt = f"""Câu hỏi: {question_text}
+
+Câu trả lời của học sinh: {user_answer}
+
+Câu trả lời đúng: {correct_answer}
+
+Hãy giải thích ngắn gọn (2-3 câu) tại sao câu trả lời của học sinh sai và tại sao câu trả lời đúng là đúng. Giải thích phải dễ hiểu và hữu ích cho học sinh."""
+            
+            model = self.client.GenerativeModel(self.config.gemini_model)
+            response = model.generate_content(prompt)
+            explanation = getattr(response, 'text', str(response)).strip()
+            return explanation if explanation else None
+        except Exception as e:
+            logger.error(f"[AI] Gemini explanation error: {e}")
+            return None
+
 def get_ai_service():
     config = AIServiceConfig()
     if config.ai_provider == 'openai':
         return OpenAIService()
+    if config.ai_provider in ('claude', 'anthropic'):
+        # Lazy import Anthropic service implementation
+        try:
+            return AnthropicService()
+        except Exception:
+            logger.warning('[AI] Anthropic/Claude service not available, falling back to Gemini')
+            return GoogleGeminiService()
     return GoogleGeminiService()
+
+
+class AnthropicService:
+    """Service for Anthropic Claude interactions (tries to use `anthropic` package)."""
+    def __init__(self):
+        self.config = AIServiceConfig()
+        self.client = None
+        self._initialize_client()
+
+    def _initialize_client(self):
+        try:
+            # Try to import official anthropic client
+            from anthropic import Anthropic
+            if self.config.claude_api_key:
+                self.client = Anthropic(api_key=self.config.claude_api_key)
+                logger.info(f"[AI] Anthropic client initialized: {self.config.claude_model}")
+            else:
+                logger.warning('[AI] CLAUDE_API_KEY not set; Anthropic service disabled')
+        except Exception as e:
+            logger.error(f"[AI] Failed to initialize Anthropic/Claude client: {e}")
+
+    def generate_response(self, user_message: str, context: Optional[str] = None, system_prompt: Optional[str] = None) -> Optional[str]:
+        if not self.client:
+            return None
+        try:
+            prompt = (system_prompt or self.config.system_prompt_base) + "\n\n"
+            if context:
+                prompt += f"Context: {context}\n\n"
+            prompt += f"User: {user_message}"
+
+            # Use client completion/create depending on client implementation
+            try:
+                resp = self.client.completions.create(model=self.config.claude_model, prompt=prompt, max_tokens=self.config.max_tokens, temperature=self.config.temperature)
+                # Newer clients may return attribute 'completion' or 'text'
+                result = getattr(resp, 'completion', None) or getattr(resp, 'text', None) or (resp.get('completion') if isinstance(resp, dict) else None)
+                return result
+            except Exception:
+                # Try alternate method name
+                resp = self.client.create_completion(model=self.config.claude_model, prompt=prompt, max_tokens=self.config.max_tokens, temperature=self.config.temperature)
+                result = getattr(resp, 'completion', None) or getattr(resp, 'text', None) or (resp.get('completion') if isinstance(resp, dict) else None)
+                return result
+        except Exception as e:
+            logger.error(f"[AI] Anthropic error: {e}")
+            return None
+
+    def generate_lesson_content(self, topic: str, level: str = "beginner") -> Optional[Dict]:
+        if not self.client:
+            return None
+        try:
+            prompt = f"""You are an educational assistant. Create a lesson about: '{topic}' (level: {level})\nReturn a JSON object with title, content, duration_minutes and summary."""
+            try:
+                resp = self.client.completions.create(model=self.config.claude_model, prompt=prompt, max_tokens=self.config.max_tokens, temperature=self.config.temperature)
+                text = getattr(resp, 'completion', None) or getattr(resp, 'text', None) or (resp.get('completion') if isinstance(resp, dict) else str(resp))
+            except Exception:
+                resp = self.client.create_completion(model=self.config.claude_model, prompt=prompt, max_tokens=self.config.max_tokens, temperature=self.config.temperature)
+                text = getattr(resp, 'completion', None) or getattr(resp, 'text', None) or (resp.get('completion') if isinstance(resp, dict) else str(resp))
+
+            try:
+                return json.loads(text)
+            except Exception:
+                import re
+                m = re.search(r'\{.*\}', text, re.DOTALL)
+                if m:
+                    try:
+                        return json.loads(m.group())
+                    except Exception:
+                        return None
+                return None
+        except Exception as e:
+            logger.error(f"[AI] Anthropic lesson generation error: {e}")
+            return None

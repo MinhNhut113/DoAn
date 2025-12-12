@@ -19,6 +19,11 @@ class User(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    # Password reset token (6-digit) and expiry for forgot-password flow
+    reset_token = db.Column(db.String(10))
+    reset_token_expiry = db.Column(db.DateTime)
+    # Learning goal for the student
+    learning_goal = db.Column(db.Text)
     
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -35,6 +40,7 @@ class User(db.Model):
             'avatar_url': self.avatar_url,
             'role': self.role,
             'is_active': self.is_active,
+            'learning_goal': self.learning_goal,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
 

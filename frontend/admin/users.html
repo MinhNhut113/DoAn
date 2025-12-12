@@ -52,6 +52,40 @@
         </div>
     </div>
 
+    <!-- Edit User Modal -->
+    <div id="editUserModal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>Chỉnh sửa người dùng</h3>
+            <div style="display:flex;flex-direction:column;gap:8px;">
+                <label>Vai trò
+                    <select id="editUserRole" class="form-control">
+                        <option value="student">Student</option>
+                        <option value="instructor">Instructor</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </label>
+
+                <label style="display:flex;align-items:center;gap:8px;">Active
+                    <input type="checkbox" id="editUserActive">
+                </label>
+
+                <label>New Password
+                    <input id="editUserPassword" class="form-control" placeholder="Leave blank to keep current">
+                </label>
+
+                <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px;">
+                    <button class="btn" onclick="closeEditModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="saveEditUser()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .modal{position:fixed;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center}
+        .modal-content{background:#fff;padding:20px;border-radius:6px;min-width:320px;max-width:480px}
+    </style>
+
     <script src="../js/api.js"></script>
     <script>
         if (!isAuthenticated()) {
@@ -96,6 +130,7 @@
                     <td>${user.role}</td>
                     <td>${user.is_active ? '<span style="color: var(--success-color);">Hoạt động</span>' : '<span style="color: var(--danger-color);">Khóa</span>'}</td>
                     <td>
+                        <button class="btn btn-secondary" onclick="openEditUser(${user.user_id})">Edit</button>
                         ${user.is_active ? `
                             <button class="btn btn-warning" onclick="deactivateUser(${user.user_id})">Khóa</button>
                         ` : `
@@ -143,6 +178,53 @@
         
         setupUserSearch();
         loadUsers();
+        
+        // ----- Edit user modal logic -----
+        function closeEditModal() {
+            document.getElementById('editUserModal').style.display = 'none';
+        }
+
+        async function openEditUser(userId) {
+            try {
+                const users = await adminAPI.getUsers();
+                const user = users.find(u => u.user_id === userId);
+                if (!user) {
+                    showAlert('Không tìm thấy người dùng', 'error');
+                    return;
+                }
+
+                document.getElementById('editUserRole').value = user.role || 'student';
+                document.getElementById('editUserActive').checked = !!user.is_active;
+                document.getElementById('editUserPassword').value = '';
+                // store editing id on modal element
+                document.getElementById('editUserModal').dataset.editUserId = String(userId);
+                document.getElementById('editUserModal').style.display = 'flex';
+            } catch (error) {
+                showAlert('Lỗi mở modal chỉnh sửa: ' + error.message, 'error');
+            }
+        }
+
+        async function saveEditUser() {
+            const modal = document.getElementById('editUserModal');
+            const userId = parseInt(modal.dataset.editUserId || '0', 10);
+            if (!userId) return showAlert('Invalid user id', 'error');
+
+            const role = document.getElementById('editUserRole').value;
+            const is_active = document.getElementById('editUserActive').checked;
+            const password = document.getElementById('editUserPassword').value;
+
+            const payload = { role, is_active };
+            if (password && password.trim().length > 0) payload.password = password.trim();
+
+            try {
+                await adminAPI.updateUser(userId, payload);
+                showAlert('Đã cập nhật người dùng', 'success');
+                closeEditModal();
+                loadUsers();
+            } catch (error) {
+                showAlert('Lỗi lưu thay đổi: ' + error.message, 'error');
+            }
+        }
     </script>
 </body>
 </html>

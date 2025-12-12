@@ -140,6 +140,16 @@ const authAPI = {
         method: 'POST',
         body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
     })
+    ,
+    forgotPassword: (email) => apiRequest('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email })
+    }),
+
+    resetPassword: (email, token, newPassword) => apiRequest('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ email, token, new_password: newPassword })
+    })
 };
 
 // Courses API
@@ -244,6 +254,11 @@ const adminAPI = {
         method: 'DELETE'
     }),
     
+    updateUser: (userId, data) => apiRequest(`/admin/users/${userId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data)
+    }),
+    
     createCourse: (courseData) => apiRequest('/admin/courses', {
         method: 'POST',
         body: JSON.stringify(courseData)
@@ -289,10 +304,46 @@ const adminAPI = {
     getStatistics: () => apiRequest('/admin/statistics')
 };
 
+// Admin AI-generated questions
+adminAPI.getGeneratedQuestions = (params = '') => apiRequest(`/ai/generated-questions${params ? '?' + params : ''}`);
+adminAPI.approveGeneratedQuestion = (id) => apiRequest(`/ai/generated-questions/${id}/approve`, { method: 'POST' });
+adminAPI.rejectGeneratedQuestion = (id) => apiRequest(`/ai/generated-questions/${id}/reject`, { method: 'POST' });
+adminAPI.updateQuestion = (id, data) => apiRequest(`/ai/generated-questions/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+
 // Logout function
 function logout() {
     localStorage.removeItem('auth_token');
     localStorage.removeItem('user_data');
     window.location.href = '/';
 }
+
+// Notifications API
+adminAPI.sendNotification = (payload) => apiRequest('/admin/notifications/send', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+});
+
+const notificationsAPI = {
+    getAll: (unreadOnly = false) => apiRequest(`/notifications?unread=${unreadOnly}`),
+    markRead: (notificationId) => apiRequest(`/notifications/${notificationId}/read`, {
+        method: 'POST'
+    })
+};
+
+const notificationsAPI_old = {
+    getMyNotifications: (unreadOnly = false) => apiRequest(`/admin/notifications?unread=${unreadOnly}`)
+};
+
+// Assignments API
+const assignmentsAPI = {
+    getForLesson: (lessonId) => apiRequest(`/assignments/lesson/${lessonId}`),
+    submit: (assignmentId, submissionContent, fileUrl) => apiRequest('/assignments/submit', {
+        method: 'POST',
+        body: JSON.stringify({
+            assignment_id: assignmentId,
+            submission_content: submissionContent,
+            file_url: fileUrl
+        })
+    })
+};
 

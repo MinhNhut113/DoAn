@@ -12,11 +12,25 @@
             <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI</div>
             <ul class="navbar-menu">
                 <li><a href="dashboard.html">Dashboard</a></li>
+                <li style="position:relative;" id="notifNavItem">
+                    <a href="#" onclick="openNotifications()">🔔 <span id="notifBadge" style="background:#dc2626;color:white;padding:2px 6px;border-radius:12px;font-size:12px;display:none;margin-left:6px;">0</span></a>
+                </li>
                 <li><a href="courses.html">Khóa Học</a></li>
                 <li><a href="progress.html">Tiến Độ</a></li>
                 <li><a href="profile.html">Hồ Sơ</a></li>
                 <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
             </ul>
+        </div>
+    </div>
+
+    <!-- Notifications Modal -->
+    <div id="notificationsModal" style="display:none; position:fixed; left:0; top:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:2000; align-items:center; justify-content:center;">
+        <div style="background:white; max-width:640px; width:92%; max-height:80vh; overflow:auto; border-radius:8px; padding:16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3>Thông báo của bạn</h3>
+                <button class="btn" onclick="closeNotifications()">Đóng</button>
+            </div>
+            <div id="notificationsList" style="margin-top:12px;"></div>
         </div>
     </div>
 
@@ -36,6 +50,24 @@
             <div class="stat-card">
                 <div class="stat-value" id="avgScore">-</div>
                 <div class="stat-label">Điểm Trung Bình</div>
+            </div>
+        </div>
+        
+        <!-- Learning Goal Card -->
+        <div class="card">
+            <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <span>🎯 Mục Tiêu Của Tôi</span>
+                <button id="editGoalBtn" class="btn btn-sm" onclick="toggleEditGoal()" style="padding: 4px 8px; font-size: 12px;">✏️ Sửa</button>
+            </div>
+            <div id="goalDisplay" style="padding: 16px; min-height: 80px;">
+                <p id="goalText" style="font-size: 16px; line-height: 1.6; margin: 0; color: #444;"></p>
+            </div>
+            <div id="goalEditForm" style="display: none; padding: 16px; border-top: 1px solid #e5e7eb;">
+                <textarea id="goalInput" placeholder="Nhập mục tiêu học tập của bạn..." style="width: 100%; height: 100px; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-family: inherit; margin-bottom: 8px; resize: none;"></textarea>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-primary" onclick="saveGoal()" style="flex: 1;">Lưu</button>
+                    <button class="btn" onclick="toggleEditGoal()" style="flex: 1;">Hủy</button>
+                </div>
             </div>
         </div>
         
@@ -96,6 +128,10 @@
         
         async function loadDashboard() {
             try {
+                // Load user profile to get learning goal
+                const profile = await authAPI.getProfile();
+                displayLearningGoal(profile.learning_goal);
+                
                 // Load dashboard data
                 const dashboardData = await progressAPI.getDashboard();
                 
@@ -197,6 +233,52 @@
         }
         
         loadDashboard();
+
+        // Notifications handling
+        async function refreshNotifBadge() {
+            try {
+                const notes = await notificationsAPI.getMyNotifications(true);
+                const badge = document.getElementById('notifBadge');
+                if (notes && notes.length > 0) {
+                    badge.style.display = 'inline-block';
+                    badge.textContent = String(notes.length);
+                } else {
+                    badge.style.display = 'none';
+                }
+            } catch (err) {
+                console.debug('Unable to fetch notifications:', err);
+            }
+        }
+
+        async function openNotifications() {
+            try {
+                const notes = await notificationsAPI.getMyNotifications(true);
+                const el = document.getElementById('notificationsList');
+                if (!notes || notes.length === 0) {
+                    el.innerHTML = '<p>Không có thông báo mới.</p>';
+                } else {
+                    el.innerHTML = notes.map(n => `
+                        <div style="padding:10px;border-bottom:1px solid #eee;">
+                            <div style="font-weight:700">${n.title}</div>
+                            <div style="color:#6b7280;margin-top:6px;">${n.message}</div>
+                            <div style="font-size:12px;color:#9ca3af;margin-top:6px;">${n.created_at ? n.created_at.replace('T',' ') : ''}</div>
+                        </div>
+                    `).join('');
+                }
+                document.getElementById('notificationsModal').style.display = 'flex';
+            } catch (err) {
+                showAlert('Lỗi tải thông báo: ' + (err.message||err), 'error');
+            }
+        }
+
+        function closeNotifications() {
+            document.getElementById('notificationsModal').style.display = 'none';
+            // refresh badge after closing
+            refreshNotifBadge();
+        }
+
+        // initial badge refresh
+        refreshNotifBadge();
         
         // Chatbot functions
         function toggleChat() {
@@ -285,6 +367,115 @@
         document.getElementById('chatInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendChatMessage();
         });
+
+        // ========== Notifications ==========
+        async function loadNotifications() {
+            try {
+                const notifs = await notificationsAPI.getAll(false);
+                const unread = notifs.filter(n => !n.is_read);
+                
+                // Update badge
+                const badge = document.getElementById('notifBadge');
+                if (unread.length > 0) {
+                    badge.textContent = unread.length;
+                    badge.style.display = 'inline-block';
+                } else {
+                    badge.style.display = 'none';
+                }
+                
+                // Store for modal
+                window.allNotifications = notifs;
+            } catch (e) {
+                console.error('Failed to load notifications:', e);
+            }
+        }
+
+        function openNotifications() {
+            const modal = document.getElementById('notificationsModal');
+            const list = document.getElementById('notificationsList');
+            
+            if (!window.allNotifications || window.allNotifications.length === 0) {
+                list.innerHTML = '<p style="color: #999;">Không có thông báo nào.</p>';
+                modal.style.display = 'flex';
+                return;
+            }
+            
+            list.innerHTML = window.allNotifications.map(n => `
+                <div style="padding: 12px; border-bottom: 1px solid #e5e7eb; background: ${n.is_read ? '#fff' : '#f0f9ff'};">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div style="flex: 1;">
+                            <strong>${n.title || 'Thông báo'}</strong>
+                            <p style="margin: 6px 0 0; color: #666; font-size: 14px;">${n.message || ''}</p>
+                            <small style="color: #999;">${new Date(n.created_at).toLocaleString('vi-VN')}</small>
+                        </div>
+                        ${!n.is_read ? `<button class="btn btn-sm" onclick="markNotifRead(${n.notification_id})">Đánh dấu đã đọc</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+            
+            modal.style.display = 'flex';
+        }
+
+        function closeNotifications() {
+            document.getElementById('notificationsModal').style.display = 'none';
+        }
+
+        async function markNotifRead(id) {
+            try {
+                await notificationsAPI.markRead(id);
+                // Reload notifications
+                await loadNotifications();
+                openNotifications();
+            } catch (e) {
+                showAlert('Lỗi đánh dấu đã đọc: ' + e.message, 'error');
+            }
+        }
+
+        // Load notifications when page loads
+        loadNotifications();
+        // Refresh every 30 seconds
+        setInterval(loadNotifications, 30000);
+
+        // ========== Learning Goal Functions ==========
+        function displayLearningGoal(goal) {
+            const goalText = document.getElementById('goalText');
+            if (goal && goal.trim()) {
+                goalText.textContent = goal;
+            } else {
+                goalText.textContent = '📌 Bạn chưa đặt mục tiêu. Hãy thêm mục tiêu học tập của bạn!';
+                goalText.style.color = '#999';
+            }
+        }
+
+        function toggleEditGoal() {
+            const display = document.getElementById('goalDisplay');
+            const form = document.getElementById('goalEditForm');
+            const input = document.getElementById('goalInput');
+            
+            if (form.style.display === 'none') {
+                // Show edit form
+                input.value = document.getElementById('goalText').textContent === '📌 Bạn chưa đặt mục tiêu. Hãy thêm mục tiêu học tập của bạn!' ? '' : document.getElementById('goalText').textContent;
+                form.style.display = 'block';
+                display.style.display = 'none';
+                input.focus();
+            } else {
+                // Hide edit form
+                form.style.display = 'none';
+                display.style.display = 'block';
+            }
+        }
+
+        async function saveGoal() {
+            try {
+                const goal = document.getElementById('goalInput').value.trim();
+                await authAPI.updateProfile({ learning_goal: goal });
+                showAlert('Mục tiêu đã lưu!', 'success');
+                displayLearningGoal(goal);
+                toggleEditGoal();
+            } catch (error) {
+                showAlert('Lỗi lưu mục tiêu: ' + error.message, 'error');
+            }
+        }
     </script>
 </body>
 </html>

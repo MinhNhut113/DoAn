@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from utils import get_current_user_id
-from models import db, User, Course, Lesson, QuizQuestion, Quiz, QuizQuestionMapping, AIGeneratedQuestion, GenerationRequest, Enrollment, QuizResult, Assignment
+from models import db, User, Course, Lesson, QuizQuestion, Quiz, QuizQuestionMapping, AIGeneratedQuestion, GenerationRequest, Enrollment, QuizResult, Assignment, Notification
 from functools import wraps
 from datetime import datetime
 import json
@@ -75,6 +75,43 @@ def delete_user(user_id):
         db.session.commit()
         
         return jsonify({'message': 'User deleted successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+# Update user (role, is_active, optional password)
+@bp.route('/users/<int:user_id>', methods=['PUT'])
+@admin_required
+def update_user(user_id):
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        data = request.get_json() or {}
+
+        # Role update (validate allowed roles)
+        role = data.get('role')
+        if role:
+            if role not in ('student', 'instructor', 'admin'):
+                return jsonify({'error': 'Invalid role'}), 400
+            user.role = role
+
+        # Active flag
+        if 'is_active' in data:
+            user.is_active = bool(data.get('is_active'))
+
+        # Optional password update
+        new_password = data.get('password')
+        if new_password:
+            # Use model helper to hash password
+            user.set_password(new_password)
+
+        user.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({'message': 'User updated successfully', 'user': user.to_dict()}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -640,4 +677,61 @@ Trả về CHÍNH XÁC JSON array gồm {num_questions} phần tử, mỗi phầ
         db.session.rollback()
 
     return quiz.quiz_id
+
+
+# ------------------ Notifications ------------------
+@bp.route('/notifications/send', methods=['POST'])
+@admin_required
+def send_notifications():
+    """Admin: send notification to users. Input JSON: {title, message, target}
+       target: 'all' currently supported"""
+    try:
+        data = request.get_json() or {}
+        title = data.get('title')
+        message = data.get('message')
+        target = data.get('target', 'all')
+
+        if not title or not message:
+            return jsonify({'error': 'title and message are required'}), 400
+
+        if target == 'all':
+            # Create notifications for all users
+            user_ids = [u.user_id for u in User.query.with_entities(User.user_id).all()]
+            now = datetime.utcnow()
+            objs = [Notification(user_id=uid, title=title, message=message, notification_type='admin_broadcast', is_read=False, created_at=now) for uid in user_ids]
+            if objs:
+                db.session.bulk_save_objects(objs)
+                db.session.commit()
+            return jsonify({'message': 'Notifications created', 'count': len(objs)}), 201
+
+        return jsonify({'error': 'Unsupported target'}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.route('/notifications', methods=['GET'])
+@jwt_required()
+def get_notifications():
+    """Get notifications for current user. Optional query param: unread=true|false"""
+    try:
+        user_id = get_current_user_id()
+        unread = request.args.get('unread', None)
+
+        query = Notification.query.filter_by(user_id=user_id)
+        if unread is not None:
+            # If client requests unread=true, they expect notifications where is_read == False
+            want_unread = str(unread).lower() in ('1', 'true', 'yes')
+            query = query.filter_by(is_read=(not want_unread))
+
+        notes = query.order_by(Notification.created_at.desc()).limit(50).all()
+        return jsonify([{
+            'notification_id': n.notification_id,
+            'title': n.title,
+            'message': n.message,
+            'is_read': n.is_read,
+            'created_at': n.created_at.isoformat() if n.created_at else None
+        } for n in notes]), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 

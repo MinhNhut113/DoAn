@@ -302,6 +302,70 @@ def reject_question(question_id):
         return jsonify({'error': str(e)}), 500
 
 
+@bp.route('/generated-questions/<int:question_id>', methods=['PUT'])
+@jwt_required()
+def update_generated_question(question_id):
+    """Allow admin to modify AI-generated question content before approval."""
+    try:
+        user_id = get_current_user_id()
+        user = User.query.get(user_id)
+        if not user or user.role != 'admin':
+            return jsonify({'error': 'Only admins can update generated questions'}), 403
+
+        question = AIGeneratedQuestion.query.get(question_id)
+        if not question:
+            return jsonify({'error': 'Question not found'}), 404
+
+        data = request.get_json() or {}
+
+        if 'question_text' in data:
+            question.question_text = data.get('question_text')
+
+        if 'options' in data:
+            opts = data.get('options')
+            # Accept list or JSON string or comma-separated
+            if isinstance(opts, list):
+                question.options = json.dumps(opts)
+            elif isinstance(opts, str):
+                try:
+                    # try parse JSON
+                    parsed = json.loads(opts)
+                    if isinstance(parsed, list):
+                        question.options = json.dumps(parsed)
+                    else:
+                        # fallback to storing as single option
+                        question.options = json.dumps([opts])
+                except Exception:
+                    # comma-separated
+                    parts = [p.trim() if hasattr(p, 'trim') else p.strip() for p in opts.split(',')]
+                    question.options = json.dumps([p for p in parts if p])
+
+        if 'correct_answer' in data:
+            try:
+                question.correct_answer = int(data.get('correct_answer'))
+            except Exception:
+                pass
+
+        if 'explanation' in data:
+            question.explanation = data.get('explanation')
+
+        if 'difficulty_level' in data:
+            try:
+                question.difficulty_level = int(data.get('difficulty_level'))
+            except Exception:
+                pass
+
+        # Do not automatically approve on edit; admin may call approve separately
+        question.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        return jsonify({'message': 'Question updated', 'question': question.to_dict(include_answer=True)}), 200
+    except Exception as e:
+        logger.error(f"[Questions] Error updating question: {e}")
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
 @bp.route('/generation-status/<int:request_id>', methods=['GET'])
 @jwt_required()
 def get_generation_status(request_id):

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gửi Thông Báo - Admin</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-brand">🎓 Hệ Thống Học Trực Tuyến AI - Admin</div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="create_lesson_ai.html">✨ AI Tạo Bài</a></li>
+                <li><a href="courses.html">Khóa Học</a></li>
+                <li><a href="users.html">Người Dùng</a></li>
+                <li><a href="notifications.html">Thông Báo</a></li>
+                <li><a href="statistics.html">Thống Kê</a></li>
+                <li><a href="#" onclick="logout()">Đăng Xuất</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="container">
+        <h1>Gửi Thông Báo</h1>
+        <div class="card">
+            <div class="form-group">
+                <label>Tiêu đề</label>
+                <input id="notifTitle" class="form-control" placeholder="Tiêu đề thông báo">
+            </div>
+            <div class="form-group">
+                <label>Nội dung</label>
+                <textarea id="notifMessage" class="form-control" rows="6" placeholder="Nội dung thông báo"></textarea>
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button class="btn btn-primary" onclick="sendToAll()">Gửi đến tất cả sinh viên</button>
+                <button class="btn btn-secondary" onclick="clearForm()">Hủy</button>
+            </div>
+        </div>
+
+        <div id="sendResult" style="margin-top:12px;"></div>
+    </div>
+
+    <script src="../js/api.js"></script>
+    <script>
+        if (!isAuthenticated()) redirectTo('../index.html');
+
+        function clearForm(){
+            document.getElementById('notifTitle').value='';
+            document.getElementById('notifMessage').value='';
+            document.getElementById('sendResult').innerHTML='';
+        }
+
+        async function sendToAll(){
+            const title = document.getElementById('notifTitle').value.trim();
+            const message = document.getElementById('notifMessage').value.trim();
+            if (!title || !message) return showAlert('Tiêu đề và nội dung là bắt buộc', 'error');
+            if (!confirm('Gửi thông báo đến toàn bộ người dùng?')) return;
+            try{
+                const res = await adminAPI.sendNotification({ title, message, target: 'all' });
+                document.getElementById('sendResult').innerHTML = `<div style="color:green;">Đã gửi: ${res.count} thông báo</div>`;
+                showAlert('Gửi thông báo thành công', 'success');
+            }catch(err){
+                showAlert('Lỗi gửi thông báo: ' + (err.message||err), 'error');
+            }
+        }
+    </script>
+</body>
+</html>

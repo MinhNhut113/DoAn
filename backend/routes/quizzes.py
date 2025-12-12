@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from utils import get_current_user_id
 from models import db, Quiz, QuizQuestion, QuizResult, QuizAnswer, Topic, QuizQuestionMapping
+from ai_models.ai_service import get_ai_service
 import json
 
 bp = Blueprint('quizzes', __name__)
@@ -74,6 +75,9 @@ def submit_quiz(quiz_id):
         correct_count = 0
         answer_details = []
 
+        # Get AI service for generating explanations
+        ai_service = get_ai_service()
+        
         for answer_data in answers:
             question_id = answer_data.get('question_id')
             selected_answer = answer_data.get('selected_answer')
@@ -88,14 +92,36 @@ def submit_quiz(quiz_id):
             if is_correct:
                 correct_count += 1
 
-            answer_details.append({
+            # Build answer detail
+            answer_detail = {
                 'question_id': question_id,
                 'selected_answer': selected_answer,
                 'is_correct': is_correct,
                 'correct_answer': question.correct_answer,
                 'explanation': question.explanation,
+                'ai_explanation': None,
                 'time_spent_seconds': time_spent
-            })
+            }
+
+            # Generate AI explanation for wrong answers
+            if not is_correct and ai_service:
+                try:
+                    options = json.loads(question.options or '[]') if isinstance(question.options, str) else (question.options or [])
+                    user_answer_text = options[selected_answer] if isinstance(selected_answer, int) and selected_answer < len(options) else 'Không rõ'
+                    correct_answer_text = options[question.correct_answer] if isinstance(question.correct_answer, int) and question.correct_answer < len(options) else 'Không rõ'
+                    
+                    ai_exp = ai_service.generate_explanation(
+                        question.question_text,
+                        user_answer_text,
+                        correct_answer_text
+                    )
+                    if ai_exp:
+                        answer_detail['ai_explanation'] = ai_exp
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"Failed to generate AI explanation for question {question_id}: {e}")
+
+            answer_details.append(answer_detail)
         
         score = (correct_count / total_questions * 100) if total_questions > 0 else 0
         
@@ -114,8 +140,8 @@ def submit_quiz(quiz_id):
         # Save individual answers
         for answer_data in answers:
             question_id = answer_data.get('question_id')
-            if question_id in questions_dict:
-                question = questions_dict[question_id]
+            if question_id in questions:
+                question = questions[question_id]
                 quiz_answer = QuizAnswer(
                     result_id=result.result_id,
                     question_id=question_id,
