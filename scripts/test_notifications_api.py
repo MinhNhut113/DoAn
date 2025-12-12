@@ -1,32 +1,28 @@
-import os, sys, time
-import requests
+import time
 
-BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-BACKEND_DIR = os.path.join(BASE, 'backend')
-sys.path.insert(0, BACKEND_DIR)
-os.chdir(BACKEND_DIR)
+from backend import app as backend_app
+from backend.models import User, Notification, db
 
-import app as backend_app
-from models import User, Notification, db
-from datetime import datetime
+# Use test client and existing test student
+client = backend_app.test_client()
 
 # Login as student
-resp = requests.post('http://127.0.0.1:5000/api/auth/login', json={'username': 'student_test', 'password': 'NewStudent@123'})
-if resp.status_code != 200:
-    print('Student login failed:', resp.text)
-    sys.exit(1)
+login = client.post('/api/auth/login', json={'username': 'student_test', 'password': 'Student@123'})
+if login.status_code != 200:
+    print('Student login failed:', login.get_data(as_text=True))
+    raise SystemExit(1)
 
-student_token = resp.json().get('access_token')
-student_id = resp.json().get('user').get('user_id')
+student_token = login.get_json().get('access_token')
+student_id = login.get_json().get('user').get('user_id')
 headers = {'Authorization': f'Bearer {student_token}'}
 
 print('✓ Student logged in:', student_id)
 
 # Test 1: Fetch notifications
 print('\n1. Fetching all notifications...')
-resp = requests.get('http://127.0.0.1:5000/api/notifications/', headers=headers)
+resp = client.get('/api/notifications/', headers=headers)
 print(f'   Status: {resp.status_code}')
-notifications = resp.json()
+notifications = resp.get_json()
 print(f'   Total notifications: {len(notifications)}')
 if notifications:
     for n in notifications[:2]:
@@ -34,23 +30,23 @@ if notifications:
 
 # Test 2: Fetch unread notifications
 print('\n2. Fetching unread notifications...')
-resp = requests.get('http://127.0.0.1:5000/api/notifications/?unread=true', headers=headers)
+resp = client.get('/api/notifications/?unread=true', headers=headers)
 print(f'   Status: {resp.status_code}')
-unread = resp.json()
+unread = resp.get_json()
 print(f'   Unread notifications: {len(unread)}')
 
 # Test 3: Mark one as read
 if unread:
     notif_id = unread[0]['notification_id']
     print(f'\n3. Marking notification {notif_id} as read...')
-    resp = requests.post(f'http://127.0.0.1:5000/api/notifications/{notif_id}/read', headers=headers)
+    resp = client.post(f'/api/notifications/{notif_id}/read', headers=headers)
     print(f'   Status: {resp.status_code}')
-    print(f'   Response: {resp.json()}')
+    print(f'   Response: {resp.get_json()}')
     
     # Verify it's read
     print(f'\n4. Verifying notification {notif_id} is marked read...')
-    resp = requests.get('http://127.0.0.1:5000/api/notifications/?unread=true', headers=headers)
-    unread_after = resp.json()
+    resp = client.get('/api/notifications/?unread=true', headers=headers)
+    unread_after = resp.get_json()
     print(f'   Unread count after: {len(unread_after)}')
     was_marked = not any(n['notification_id'] == notif_id for n in unread_after)
     print(f'   ✓ Notification marked as read: {was_marked}')

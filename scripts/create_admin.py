@@ -1,7 +1,3 @@
-import sys, os
-# Ensure workspace root is on sys.path so package imports resolve
-workspace_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, workspace_root)
 from backend.models import db, User
 from backend import app
 

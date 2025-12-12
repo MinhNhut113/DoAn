@@ -50,7 +50,7 @@ def analyze_incorrect_answer():
         # Nếu có AI service, phân tích chi tiết hơn
         question = QuizQuestion.query.get(question_id)
         if question and analysis:
-            ai_service = get_ai_service('openai')
+            ai_service = get_ai_service()
             if ai_service:
                 try:
                     # Lấy thông tin các lựa chọn

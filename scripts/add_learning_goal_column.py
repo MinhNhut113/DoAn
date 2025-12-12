@@ -1,22 +1,18 @@
-import os, sys
-BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-BACKEND_DIR = os.path.join(BASE, 'backend')
-sys.path.insert(0, BACKEND_DIR)
-os.chdir(BACKEND_DIR)
-
-import app as backend_app
+from backend import app as backend_app
+from backend.models import db
 from sqlalchemy import text
 
-with backend_app.app.app_context():
+with backend_app.app_context():
     print('Executing ALTER TABLE to add learning_goal column if missing...')
+    conn = db.engine.connect()
     try:
-        backend_app.db.session.execute(text("ALTER TABLE users ADD learning_goal TEXT NULL"))
-        backend_app.db.session.commit()
+        conn.execute(text("ALTER TABLE users ADD learning_goal TEXT NULL"))
         print('✓ Added learning_goal column to users table')
     except Exception as e:
-        backend_app.db.session.rollback()
-        if 'already exists' in str(e).lower() or 'invalid column name' not in str(e).lower():
+        if 'already exists' in str(e).lower() or 'duplicate column name' in str(e).lower():
             print('✓ learning_goal column already exists')
         else:
             print(f'Error: {e}')
+    finally:
+        conn.close()
     print('Done')

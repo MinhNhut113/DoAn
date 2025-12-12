@@ -1,59 +1,67 @@
-import os, sys, time
-import requests
+import time
 import json
 
-BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-BACKEND_DIR = os.path.join(BASE, 'backend')
-sys.path.insert(0, BACKEND_DIR)
-os.chdir(BACKEND_DIR)
+# Import backend as package so relative imports work consistently
+from backend import app as backend_app
+from backend.models import Quiz, QuizQuestion, QuizQuestionMapping, db
 
-import app as backend_app
-from models import User, Quiz, QuizQuestion, QuizQuestionMapping, db
-
-# Login as student
-resp = requests.post('http://127.0.0.1:5000/api/auth/login', json={'username': 'student_test', 'password': 'NewStudent@123'})
-if resp.status_code != 200:
-    print('Student login failed:', resp.text)
-    sys.exit(1)
-
-student_token = resp.json().get('access_token')
-headers = {'Authorization': f'Bearer {student_token}'}
-
-# Get a quiz (assuming quiz exists)
-with backend_app.app.app_context():
+# Ensure DB tables exist and seed a minimal quiz if none present
+with backend_app.app_context():
+    db.create_all()
     quiz = Quiz.query.first()
     if not quiz:
-        print('No quiz found in database; run backend/app.py to initialize')
-        sys.exit(1)
-    
+        quiz = Quiz(quiz_name='Auto Test Quiz')
+        db.session.add(quiz)
+        db.session.flush()
+        # create 3 simple multiple-choice questions
+        questions = []
+        for i in range(1, 4):
+            q = QuizQuestion(question_text=f'Sample question {i}?', question_type='multiple_choice', options='["A","B","C","D"]', correct_answer=1, explanation='Sample explanation')
+            db.session.add(q)
+            db.session.flush()
+            questions.append(q)
+            m = QuizQuestionMapping(quiz_id=quiz.quiz_id, question_id=q.question_id, question_order=i)
+            db.session.add(m)
+        db.session.commit()
     quiz_id = quiz.quiz_id
 
+client = backend_app.test_client()
+
+# Login as student (password used in tests is 'Student@123')
+login = client.post('/api/auth/login', json={'username': 'student_test', 'password': 'Student@123'})
+if login.status_code != 200:
+    print('Student login failed:', login.get_data(as_text=True))
+    raise SystemExit(1)
+
+student_token = login.get_json().get('access_token')
+headers = {'Authorization': f'Bearer {student_token}'}
+
 # Fetch quiz
-quiz_resp = requests.get(f'http://127.0.0.1:5000/api/quizzes/{quiz_id}', headers=headers)
+quiz_resp = client.get(f'/api/quizzes/{quiz_id}', headers=headers)
 print('Quiz fetch:', quiz_resp.status_code)
 if quiz_resp.status_code != 200:
     print('Failed to fetch quiz')
-    sys.exit(1)
+    raise SystemExit(1)
 
 # Get actual question IDs and answers from the quiz to trigger wrong answers
-with backend_app.app.app_context():
+with backend_app.app_context():
     mappings = QuizQuestionMapping.query.filter_by(quiz_id=quiz_id).all()
     if not mappings:
         print(f'No questions in quiz {quiz_id}')
-        sys.exit(1)
-    
+        raise SystemExit(1)
+
     # Build answers: intentionally select wrong answers to trigger AI explanations
     submit_data = {
         'answers': [
-            {'question_id': m.question_id, 'selected_answer': 2}  # Select answer 2 for all (likely wrong)
-            for m in mappings[:3]  # Test with first 3 questions
+            {'question_id': m.question_id, 'selected_answer': 2}
+            for m in mappings[:3]
         ],
         'time_taken_minutes': 5
     }
 
-submit_resp = requests.post(f'http://127.0.0.1:5000/api/quizzes/{quiz_id}/submit', headers=headers, json=submit_data)
+submit_resp = client.post(f'/api/quizzes/{quiz_id}/submit', headers=headers, json=submit_data)
 print('Submit quiz:', submit_resp.status_code)
-result = submit_resp.json()
+result = submit_resp.get_json()
 print(json.dumps(result, indent=2, ensure_ascii=False))
 
 # Check for AI explanations in response

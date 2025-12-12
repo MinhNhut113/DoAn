@@ -1,39 +1,34 @@
-import os, sys, time
-import requests
+import time
 
-BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-BACKEND_DIR = os.path.join(BASE, 'backend')
-# ensure imports work
-sys.path.insert(0, BACKEND_DIR)
-os.chdir(BACKEND_DIR)
-
-import app as backend_app
-from models import User
+from backend import app as backend_app
+from backend.models import User, db
 
 EMAIL = 'student_test@example.com'
 NEW_PW = 'NewStudent@123'
 
-# call forgot-password via HTTP
-resp = requests.post('http://127.0.0.1:5000/api/auth/forgot-password', json={'email': EMAIL})
-print('forgot-password', resp.status_code, resp.text)
+client = backend_app.test_client()
+
+# call forgot-password via test client
+resp = client.post('/api/auth/forgot-password', json={'email': EMAIL})
+print('forgot-password', resp.status_code, resp.get_data(as_text=True))
 
 # give server a moment then read token from DB
-with backend_app.app.app_context():
+with backend_app.app_context():
     u = User.query.filter_by(email=EMAIL).first()
     if not u:
         print('User not found in DB')
-        sys.exit(1)
+        raise SystemExit(1)
     token = u.reset_token
     print('token from DB:', token)
 
 if not token:
     print('No token present; abort')
-    sys.exit(1)
+    raise SystemExit(1)
 
 # call reset-password
-r2 = requests.post('http://127.0.0.1:5000/api/auth/reset-password', json={'email': EMAIL, 'token': token, 'new_password': NEW_PW})
-print('reset-password', r2.status_code, r2.text)
+r2 = client.post('/api/auth/reset-password', json={'email': EMAIL, 'token': token, 'new_password': NEW_PW})
+print('reset-password', r2.status_code, r2.get_data(as_text=True))
 
 # try login with new password
-r3 = requests.post('http://127.0.0.1:5000/api/auth/login', json={'username': 'student_test', 'password': NEW_PW})
-print('login after reset', r3.status_code, r3.text)
+r3 = client.post('/api/auth/login', json={'username': 'student_test', 'password': NEW_PW})
+print('login after reset', r3.status_code, r3.get_data(as_text=True))

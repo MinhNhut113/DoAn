@@ -32,10 +32,12 @@ def generate_questions():
         user_id = get_current_user_id()
         data = request.get_json()
         
-        # Validate user is admin/instructor
+        # Validate user exists (allow any authenticated user to request generation)
         user = User.query.get(user_id)
-        if not user or user.role not in ['admin', 'instructor']:
-            return jsonify({'error': 'Only instructors can generate questions'}), 403
+        if not user:
+            return jsonify({'error': 'Authentication required'}), 401
+        # Note: approval of generated questions remains admin-only; generated items
+        # created by non-admin/instructor users will be saved as not approved.
         
         topic_id = data.get('topic_id')
         lesson_id = data.get('lesson_id')
@@ -44,8 +46,9 @@ def generate_questions():
         difficulty = max(1, min(data.get('difficulty', 2), 5))  # 1-5
         lesson_content = data.get('lesson_content')
         
-        if not topic_id and not lesson_id:
-            return jsonify({'error': 'Either topic_id or lesson_id is required'}), 400
+        # Require either topic/lesson identifiers or raw lesson content
+        if not topic_id and not lesson_id and not lesson_content:
+            return jsonify({'error': 'Either topic_id, lesson_id, or lesson_content is required'}), 400
         
         # Get lesson content if not provided
         if not lesson_content and lesson_id:
@@ -108,6 +111,50 @@ def generate_questions():
             logger.error(f"[Questions] Failed to generate questions for topic {topic_id}")
             return jsonify({'error': 'Failed to generate questions'}), 500
         
+        # Ensure we have a valid course_id and topic to satisfy DB constraints
+        if not course_id:
+            # try to infer from lesson
+            if lesson_id:
+                try:
+                    lesson_obj = Lesson.query.get(lesson_id)
+                    if lesson_obj:
+                        course_id = lesson_obj.course_id
+                except Exception:
+                    course_id = None
+        if not course_id:
+            # fallback: use first available course or create a placeholder course
+            try:
+                existing_course = Course.query.first()
+                if existing_course:
+                    course_id = existing_course.course_id
+                else:
+                    placeholder = Course(course_name='AI Generated (auto)', description='Auto-created course for AI-generated questions', instructor_id=user_id)
+                    db.session.add(placeholder)
+                    db.session.flush()
+                    course_id = placeholder.course_id
+            except Exception as e:
+                logger.error(f"[Questions] Failed to ensure course: {e}")
+                # mark request failed
+                gen_request.status = 'failed'
+                gen_request.error_message = 'Failed to determine course for generated questions'
+                db.session.commit()
+                return jsonify({'error': 'Failed to determine course for generated questions'}), 500
+
+        if not topic:
+            try:
+                topic = Topic.query.filter_by(topic_name=topic_name).first()
+                if not topic:
+                    topic = Topic(topic_name=topic_name, course_id=course_id)
+                    db.session.add(topic)
+                    db.session.flush()
+                topic_id = topic.topic_id
+            except Exception as e:
+                logger.error(f"[Questions] Failed to ensure topic: {e}")
+                gen_request.status = 'failed'
+                gen_request.error_message = 'Failed to determine topic for generated questions'
+                db.session.commit()
+                return jsonify({'error': 'Failed to determine topic for generated questions'}), 500
+
         # Save generated questions to database
         generated_ids = []
         for i, q in enumerate(questions):

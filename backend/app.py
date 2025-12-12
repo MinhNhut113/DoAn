@@ -1,8 +1,14 @@
 from flask import Flask, send_from_directory, jsonify, request
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
-from .config import Config
-from .models import db
+# Support running as a module (`python -m backend.app`) and as a script
+try:
+    from .config import Config
+    from .models import db
+except Exception:
+    # Fallback to absolute imports when executed as a script from project root
+    from config import Config
+    from models import db
 import os
 import logging
 from pathlib import Path
@@ -69,9 +75,15 @@ def log_auth_header():
         if auth_header:
             logger.info(f"[DEBUG] Incoming Authorization header: {auth_header}")
 
-# Import routes (relative imports)
-from .routes import auth, courses, lessons, quizzes, progress, admin, ai_recommendations, ai_chat, ai_questions, incorrect_answers, ai_compat, notifications, assignments
-from .routes import ai_lessons
+# Import routes (support module and script execution)
+try:
+    from .routes import auth, courses, lessons, quizzes, progress, admin, ai_recommendations, ai_chat, ai_questions, incorrect_answers, ai_compat, notifications, assignments
+    from .routes import ai_lessons
+except Exception:
+    # When running `python backend/app.py`, the script's directory is on sys.path
+    # and the local `routes` package can be imported directly.
+    from routes import auth, courses, lessons, quizzes, progress, admin, ai_recommendations, ai_chat, ai_questions, incorrect_answers, ai_compat, notifications, assignments
+    from routes import ai_lessons
 # Register blueprints
 app.register_blueprint(auth.bp, url_prefix='/api/auth')
 app.register_blueprint(courses.bp, url_prefix='/api/courses')
@@ -107,6 +119,11 @@ def _detect_duplicate_routes(application):
 
 
 _detect_duplicate_routes(app)
+
+# When running as a script, ensure project root is on sys.path so `import backend` works
+import sys
+if __package__ is None:
+    sys.path.insert(0, str(ROOT_DIR))
 
 # Fail-fast in production if critical secrets are missing
 if not app.config.get('DEBUG'):

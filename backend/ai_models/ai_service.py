@@ -61,6 +61,67 @@ class OpenAIService:
             logger.error(f"[AI] OpenAI error: {e}")
             return None
 
+    def generate_explanation(self, question_text: str, user_answer: str, correct_answer: str) -> Optional[str]:
+        """Generate AI explanation for why an answer is wrong"""
+        if not self.client:
+            return None
+        try:
+            prompt = f"""Câu hỏi: {question_text}
+
+Câu trả lời của học sinh: {user_answer}
+
+Câu trả lời đúng: {correct_answer}
+
+Hãy giải thích ngắn gọn (2-3 câu) tại sao câu trả lời của học sinh sai và tại sao câu trả lời đúng là đúng. Giải thích phải dễ hiểu và hữu ích cho học sinh."""
+            
+            response = self.client.chat.completions.create(
+                model=self.config.openai_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7
+            )
+            explanation = response.choices[0].message.content.strip()
+            return explanation if explanation else None
+        except Exception as e:
+            logger.error(f"[AI] OpenAI explanation error: {e}")
+            return None
+
+    def generate_quiz_questions(self, topic_name: str, lesson_content: str, num_questions: int = 5, difficulty: int = 2) -> Optional[List[Dict[str, Any]]]:
+        """Generate multiple-choice questions as a list of dicts from OpenAI."""
+        if not self.client:
+            return None
+        try:
+            prompt = f"""Generate {num_questions} multiple-choice questions (with 4 options each) about the topic: {topic_name}.
+Base the questions on the following content:\n\n{lesson_content}\n\n
+Return a JSON array like:
+[
+  {"question": "...", "options": ["a","b","c","d"], "correct_answer": 1, "explanation": "..."}, ...
+]
+Only return the JSON array and nothing else."""
+            response = self.client.chat.completions.create(
+                model=self.config.openai_model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=self.config.temperature
+            )
+            text = response.choices[0].message.content
+            # attempt to parse JSON
+            try:
+                data = json.loads(text)
+                if isinstance(data, list):
+                    return data
+            except Exception:
+                # try to extract JSON
+                m = re.search(r'\[\s*\{.*\}\s*\]', text, re.DOTALL)
+                if m:
+                    try:
+                        data = json.loads(m.group())
+                        return data if isinstance(data, list) else None
+                    except Exception:
+                        return None
+            return None
+        except Exception as e:
+            logger.error(f"[AI] OpenAI generate_quiz_questions error: {e}")
+            return None
+
     def generate_lesson_content(self, topic: str, level: str = "beginner") -> Optional[Dict]:
         """Generate lesson content based on topic"""
         if not self.client: return None
@@ -211,6 +272,32 @@ Hãy giải thích ngắn gọn (2-3 câu) tại sao câu trả lời của họ
             logger.error(f"[AI] Gemini explanation error: {e}")
             return None
 
+    def generate_quiz_questions(self, topic_name: str, lesson_content: str, num_questions: int = 5, difficulty: int = 2) -> Optional[List[Dict[str, Any]]]:
+        """Generate multiple-choice questions using Gemini."""
+        if not self.client:
+            return None
+        try:
+            prompt = f"Generate {num_questions} multiple-choice questions (4 options each) about {topic_name}.\nUse the following content as source:\n{lesson_content}\nReturn only a JSON array of objects with keys: question, options, correct_answer (index), explanation." 
+            model = self.client.GenerativeModel(self.config.gemini_model)
+            response = model.generate_content(prompt)
+            text = getattr(response, 'text', str(response))
+            try:
+                data = json.loads(text)
+                if isinstance(data, list):
+                    return data
+            except Exception:
+                m = re.search(r'\[\s*\{.*\}\s*\]', text, re.DOTALL)
+                if m:
+                    try:
+                        data = json.loads(m.group())
+                        return data if isinstance(data, list) else None
+                    except Exception:
+                        return None
+            return None
+        except Exception as e:
+            logger.error(f"[AI] Gemini generate_quiz_questions error: {e}")
+            return None
+
 def get_ai_service():
     config = AIServiceConfig()
     if config.ai_provider == 'openai':
@@ -293,4 +380,60 @@ class AnthropicService:
                 return None
         except Exception as e:
             logger.error(f"[AI] Anthropic lesson generation error: {e}")
+            return None
+
+    def generate_explanation(self, question_text: str, user_answer: str, correct_answer: str) -> Optional[str]:
+        """Generate AI explanation for why an answer is wrong"""
+        if not self.client:
+            return None
+        try:
+            prompt = f"""Câu hỏi: {question_text}
+
+Câu trả lời của học sinh: {user_answer}
+
+Câu trả lời đúng: {correct_answer}
+
+Hãy giải thích ngắn gọn (2-3 câu) tại sao câu trả lời của học sinh sai và tại sao câu trả lời đúng là đúng. Giải thích phải dễ hiểu và hữu ích cho học sinh."""
+            
+            try:
+                resp = self.client.completions.create(model=self.config.claude_model, prompt=prompt, max_tokens=500, temperature=0.7)
+                text = getattr(resp, 'completion', None) or getattr(resp, 'text', None) or (resp.get('completion') if isinstance(resp, dict) else str(resp))
+            except Exception:
+                resp = self.client.create_completion(model=self.config.claude_model, prompt=prompt, max_tokens=500, temperature=0.7)
+                text = getattr(resp, 'completion', None) or getattr(resp, 'text', None) or (resp.get('completion') if isinstance(resp, dict) else str(resp))
+            
+            explanation = text.strip() if isinstance(text, str) else str(text).strip()
+            return explanation if explanation else None
+        except Exception as e:
+            logger.error(f"[AI] Anthropic explanation error: {e}")
+            return None
+
+    def generate_quiz_questions(self, topic_name: str, lesson_content: str, num_questions: int = 5, difficulty: int = 2) -> Optional[List[Dict[str, Any]]]:
+        """Generate multiple-choice questions using Anthropic/Claude."""
+        if not self.client:
+            return None
+        try:
+            prompt = f"Generate {num_questions} multiple-choice questions (4 options each) about {topic_name}.\nUse the following content as source:\n{lesson_content}\nReturn only a JSON array of objects with keys: question, options, correct_answer (index), explanation." 
+            try:
+                resp = self.client.completions.create(model=self.config.claude_model, prompt=prompt, max_tokens=self.config.max_tokens, temperature=self.config.temperature)
+                text = getattr(resp, 'completion', None) or getattr(resp, 'text', None) or (resp.get('completion') if isinstance(resp, dict) else str(resp))
+            except Exception:
+                resp = self.client.create_completion(model=self.config.claude_model, prompt=prompt, max_tokens=self.config.max_tokens, temperature=self.config.temperature)
+                text = getattr(resp, 'completion', None) or getattr(resp, 'text', None) or (resp.get('completion') if isinstance(resp, dict) else str(resp))
+
+            try:
+                data = json.loads(text)
+                if isinstance(data, list):
+                    return data
+            except Exception:
+                m = re.search(r'\[\s*\{.*\}\s*\]', text, re.DOTALL)
+                if m:
+                    try:
+                        data = json.loads(m.group())
+                        return data if isinstance(data, list) else None
+                    except Exception:
+                        return None
+            return None
+        except Exception as e:
+            logger.error(f"[AI] Anthropic generate_quiz_questions error: {e}")
             return None

@@ -1,18 +1,10 @@
-import os
-import sys
 import time
-import requests
 
-# change cwd to backend so imports like `from config import Config` work
-BASE = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-BACKEND_DIR = os.path.join(BASE, 'backend')
-os.chdir(BACKEND_DIR)
-sys.path.insert(0, BACKEND_DIR)
+# Use package imports and the backend app directly
+from backend import app as backend_app
+from backend.models import db, User, Notification
 
-import app as backend_app
-from models import db, User
-
-with backend_app.app.app_context():
+with backend_app.app_context():
     admin_username = 'admin_test'
     admin = User.query.filter_by(username=admin_username).first()
     if not admin:
@@ -23,44 +15,48 @@ with backend_app.app.app_context():
         print('Created admin', admin.user_id)
     else:
         print('Admin exists', admin.user_id)
+    
+    # Use Flask test client to perform HTTP requests without external server
+    client = backend_app.test_client()
+    
+    # Login as admin via test client
+    login = client.post('/api/auth/login', json={'username': 'admin_test', 'password': 'Admin@123'})
+    print('admin login', login.status_code, login.get_data(as_text=True))
+    if login.status_code != 200:
+        raise SystemExit('Admin login failed')
+    admin_token = login.get_json().get('access_token')
+    headers = {'Authorization': 'Bearer ' + admin_token}
+    
+    # Register a student user via API (if already exists the endpoint may return 400)
+    reg = client.post('/api/auth/register', json={'username':'student_test','email':'student_test@example.com','password':'Student@123','full_name':'Student Test'})
+    print('register student', reg.status_code, reg.get_data(as_text=True))
+    
+    # If registration failed because user exists, ensure password is set to known value
+    if reg.status_code not in (200, 201):
+        student = User.query.filter_by(username='student_test').first()
+        if student:
+            student.set_password('Student@123')
+            db.session.commit()
 
-# Give server a moment
-time.sleep(1)
+    # Login as student
+    slogin = client.post('/api/auth/login', json={'username':'student_test','password':'Student@123'})
+    print('student login', slogin.status_code, slogin.get_data(as_text=True))
+    if slogin.status_code != 200:
+        raise SystemExit('Student login failed')
+    student_token = slogin.get_json().get('access_token')
+    
+    # Send notification via admin endpoint
+    send = client.post('/api/admin/notifications/send', headers=headers, json={'title':'Test Notice','message':'Hello students','target':'all'})
+    print('send notif', send.status_code, send.get_data(as_text=True))
+    
+    # Student fetch notifications
+    getn = client.get('/api/notifications?unread=true', headers={'Authorization':'Bearer '+student_token})
+    print('student notifications', getn.status_code, getn.get_data(as_text=True))
 
-# Login as admin via HTTP
-login = requests.post('http://127.0.0.1:5000/api/auth/login', json={'username': 'admin_test', 'password': 'Admin@123'})
-print('admin login', login.status_code, login.text)
-if login.status_code != 200:
-    raise SystemExit('Admin login failed')
-admin_token = login.json().get('access_token')
-headers = {'Authorization': 'Bearer ' + admin_token}
 
-# Register a student user via API
-reg = requests.post('http://127.0.0.1:5000/api/auth/register', json={'username':'student_test','email':'student_test@example.com','password':'Student@123','full_name':'Student Test'})
-print('register student', reg.status_code, reg.text)
-if reg.status_code not in (200,201):
-    # if already exists, try login
-    pass
-
-# Login as student
-slogin = requests.post('http://127.0.0.1:5000/api/auth/login', json={'username':'student_test','password':'Student@123'})
-print('student login', slogin.status_code, slogin.text)
-if slogin.status_code != 200:
-    raise SystemExit('Student login failed')
-student_token = slogin.json().get('access_token')
-
-# Send notification via admin endpoint
-send = requests.post('http://127.0.0.1:5000/api/admin/notifications/send', headers=headers, json={'title':'Test Notice','message':'Hello students','target':'all'})
-print('send notif', send.status_code, send.text)
-
-# Student fetch notifications
-getn = requests.get('http://127.0.0.1:5000/api/admin/notifications?unread=true', headers={'Authorization':'Bearer '+student_token})
-print('student notifications', getn.status_code, getn.text)
 
 # Inspect notifications table directly via backend app context for debugging
-import app as backend_app
-from models import Notification
-with backend_app.app.app_context():
+with backend_app.app_context():
     notes = Notification.query.order_by(Notification.created_at.desc()).limit(20).all()
     print('DB total notifications:', Notification.query.count())
     for n in notes:
