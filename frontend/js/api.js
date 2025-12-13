@@ -1,68 +1,26 @@
-// API Configuration - Tự động phát hiện URL
-function getApiBaseUrl() {
-    // Nếu chạy file HTML trực tiếp từ máy tính (file://)
-    if (window.location.protocol === 'file:') {
-        return 'http://localhost:5000/api';
-    }
-    
-    // Nếu chạy qua Live Server hoặc Python http.server (ví dụ localhost:8000)
-    // Mặc định Backend chạy ở port 5000
-    const hostname = window.location.hostname;
-    return `http://${hostname}:5000/api`;
+// API Configuration
+const API_BASE_URL = 'http://localhost:5000/api';
+
+// Token management
+function getToken() {
+    return localStorage.getItem('token');
 }
 
-// Chỉ khai báo MỘT LẦN
-const API_BASE_URL = getApiBaseUrl();
-console.log('🔗 API Base URL:', API_BASE_URL);
-
-// Get auth token from localStorage
-function getAuthToken() {
-    return localStorage.getItem('auth_token');
+function setToken(token) {
+    localStorage.setItem('token', token);
 }
 
-// Helper functions
+function removeToken() {
+    localStorage.removeItem('token');
+}
+
 function isAuthenticated() {
-    return !!localStorage.getItem('auth_token');
-}
-
-function redirectTo(path) {
-    window.location.href = path;
-}
-
-function showAlert(message, type = 'info') {
-    const alertDiv = document.createElement('div');
-    alertDiv.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 15px 20px;
-        border-radius: 5px;
-        z-index: 9999;
-        color: white;
-        font-weight: bold;
-        animation: slideIn 0.3s ease-in;
-    `;
-    
-    if (type === 'error') {
-        alertDiv.style.backgroundColor = '#dc3545';
-    } else if (type === 'success') {
-        alertDiv.style.backgroundColor = '#28a745';
-    } else {
-        alertDiv.style.backgroundColor = '#17a2b8';
-    }
-    
-    alertDiv.textContent = message;
-    document.body.appendChild(alertDiv);
-    
-    setTimeout(() => {
-        alertDiv.remove();
-    }, 3000);
+    return !!getToken();
 }
 
 // API Request Helper
 async function apiRequest(endpoint, options = {}) {
-    const token = getAuthToken();
-    const url = `${API_BASE_URL}${endpoint}`;
+    const token = getToken();
     
     const defaultOptions = {
         headers: {
@@ -71,9 +29,9 @@ async function apiRequest(endpoint, options = {}) {
     };
     
     if (token) {
-        // Ensure we don't double-prefix 'Bearer' if token already contains it
-        const rawToken = token.startsWith('Bearer ') ? token.split(' ')[1] : token;
-        defaultOptions.headers['Authorization'] = `Bearer ${rawToken}`;
+        // FIX: Remove "Bearer " prefix if already present to prevent "Bearer Bearer token"
+        const cleanToken = token.replace(/^Bearer\s+/i, '');
+        defaultOptions.headers['Authorization'] = `Bearer ${cleanToken}`;
     }
     
     const config = {
@@ -86,264 +44,322 @@ async function apiRequest(endpoint, options = {}) {
     };
     
     try {
-        const response = await fetch(url, config);
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
         
-        let data;
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-            data = await response.json();
-        } else {
-            const text = await response.text();
-            throw new Error(`Server returned non-JSON: ${text.substring(0, 100)}`);
+        if (response.status === 401) {
+            removeToken();
+            redirectTo('../index.html');
+            throw new Error('Unauthorized');
         }
         
+        const data = await response.json();
+        
         if (!response.ok) {
-            throw new Error(data.error || `HTTP ${response.status}: ${response.statusText}`);
+            throw new Error(data.error || 'Request failed');
         }
         
         return data;
     } catch (error) {
-        console.error('API Error:', error);
-        
-        if (error.name === 'TypeError' && error.message.includes('fetch')) {
-            throw new Error('Không thể kết nối đến server. Đảm bảo Backend đang chạy tại ' + API_BASE_URL.replace('/api', ''));
-        }
-        
-        if (!error.message) {
-            throw new Error('Lỗi không xác định: ' + error.toString());
-        }
-        
+        console.error('API Request Error:', error);
         throw error;
     }
 }
 
 // Auth API
 const authAPI = {
-    register: (userData) => apiRequest('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify(userData)
-    }),
+    async register(userData) {
+        return apiRequest('/auth/register', {
+            method: 'POST',
+            body: JSON.stringify(userData)
+        });
+    },
     
-    login: (username, password) => apiRequest('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ username, password })
-    }),
+    async login(credentials) {
+        const data = await apiRequest('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify(credentials)
+        });
+        
+        if (data.token) {
+            setToken(data.token);
+        }
+        
+        return data;
+    },
     
-    getProfile: () => apiRequest('/auth/profile'),
+    async getProfile() {
+        return apiRequest('/auth/profile');
+    },
     
-    updateProfile: (userData) => apiRequest('/auth/profile', {
-        method: 'PUT',
-        body: JSON.stringify(userData)
-    }),
-    
-    changePassword: (oldPassword, newPassword) => apiRequest('/auth/change-password', {
-        method: 'POST',
-        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
-    })
-    ,
-    forgotPassword: (email) => apiRequest('/auth/forgot-password', {
-        method: 'POST',
-        body: JSON.stringify({ email })
-    }),
-
-    resetPassword: (email, token, newPassword) => apiRequest('/auth/reset-password', {
-        method: 'POST',
-        body: JSON.stringify({ email, token, new_password: newPassword })
-    })
+    async updateProfile(updates) {
+        return apiRequest('/auth/profile', {
+            method: 'PUT',
+            body: JSON.stringify(updates)
+        });
+    }
 };
 
 // Courses API
 const coursesAPI = {
-    getAll: (enrolledOnly = false) => apiRequest(`/courses?enrolled_only=${enrolledOnly}`),
+    async getAll(enrolled = false) {
+        const query = enrolled ? '?enrolled=true' : '';
+        return apiRequest(`/courses${query}`);
+    },
     
-    getById: (courseId) => apiRequest(`/courses/${courseId}`),
+    async getById(courseId) {
+        return apiRequest(`/courses/${courseId}`);
+    },
     
-    enroll: (courseId) => apiRequest(`/courses/${courseId}/enroll`, {
-        method: 'POST'
-    })
+    async enroll(courseId) {
+        return apiRequest(`/courses/${courseId}/enroll`, {
+            method: 'POST'
+        });
+    },
+    
+    async getLessons(courseId) {
+        return apiRequest(`/courses/${courseId}/lessons`);
+    }
 };
 
 // Lessons API
 const lessonsAPI = {
-    getByCourse: (courseId) => apiRequest(`/lessons/course/${courseId}`),
+    async getById(lessonId) {
+        return apiRequest(`/lessons/${lessonId}`);
+    },
     
-    getById: (lessonId) => apiRequest(`/lessons/${lessonId}`),
-    getQuiz: (lessonId) => apiRequest(`/lessons/${lessonId}/quiz`),
-    complete: (lessonId) => apiRequest(`/lessons/${lessonId}/complete`, {
-        method: 'POST'
-    })
+    async markComplete(lessonId) {
+        return apiRequest(`/lessons/${lessonId}/complete`, {
+            method: 'POST'
+        });
+    }
 };
 
 // Quizzes API
 const quizzesAPI = {
-    getAll: (courseId = null, topicId = null) => {
-        let url = '/quizzes';
-        if (courseId) url += `?course_id=${courseId}`;
-        if (topicId) url += (courseId ? '&' : '?') + `topic_id=${topicId}`;
-        return apiRequest(url);
+    async getQuizzes(filters = {}) {
+        const params = new URLSearchParams(filters);
+        return apiRequest(`/quizzes?${params}`);
     },
     
-    getById: (quizId) => apiRequest(`/quizzes/${quizId}`),
+    async getQuiz(quizId) {
+        return apiRequest(`/quizzes/${quizId}`);
+    },
     
-    submit: (quizId, answers, timeTaken) => apiRequest(`/quizzes/${quizId}/submit`, {
-        method: 'POST',
-        body: JSON.stringify({ answers, time_taken_minutes: timeTaken })
-    }),
+    async submitQuiz(quizId, answers, timeTaken) {
+        return apiRequest(`/quizzes/${quizId}/submit`, {
+            method: 'POST',
+            body: JSON.stringify({
+                answers: answers,
+                time_taken_minutes: timeTaken
+            })
+        });
+    },
     
-    getResults: (quizId = null) => {
-        let url = '/quizzes/results';
-        if (quizId) url += `?quiz_id=${quizId}`;
-        return apiRequest(url);
+    async getResults(quizId = null) {
+        const query = quizId ? `?quiz_id=${quizId}` : '';
+        return apiRequest(`/quizzes/results${query}`);
     }
 };
 
 // Progress API
 const progressAPI = {
-    getCourseProgress: (courseId) => apiRequest(`/progress/course/${courseId}`),
-    
-    getAnalytics: (courseId = null) => {
-        let url = '/progress/analytics';
-        if (courseId) url += `?course_id=${courseId}`;
-        return apiRequest(url);
+    async getDashboard() {
+        return apiRequest('/progress/dashboard');
     },
     
-    getDashboard: () => apiRequest('/progress/dashboard')
+    async getCourseProgress(courseId) {
+        return apiRequest(`/progress/course/${courseId}`);
+    }
 };
 
-// AI Recommendations API
+// AI API
 const aiAPI = {
-    generate: (courseId = null) => apiRequest('/ai/generate', {
-        method: 'POST',
-        body: JSON.stringify({ course_id: courseId })
-    }),
-    
-    getRecommendations: (type = null, viewed = null) => {
-        let url = '/ai/recommendations';
-        if (type) url += `?type=${type}`;
-        if (viewed !== null) url += (type ? '&' : '?') + `viewed=${viewed}`;
-        return apiRequest(url);
+    async getRecommendations(courseId = null, includeReasons = true) {
+        const params = new URLSearchParams();
+        if (courseId) params.append('course_id', courseId);
+        if (includeReasons) params.append('include_reasons', 'true');
+        
+        return apiRequest(`/ai/recommendations?${params}`);
     },
     
-    markViewed: (recommendationId) => apiRequest(`/ai/${recommendationId}/view`, {
-        method: 'POST'
-    }),
+    async askQuestion(question, context = null) {
+        return apiRequest('/ai/chat', {
+            method: 'POST',
+            body: JSON.stringify({
+                message: question,
+                context: context
+            })
+        });
+    },
     
-    askQuestion: (question, courseId = null) => apiRequest('/ai/chat', { 
-        method: 'POST',
-        body: JSON.stringify({ message: question, course_id: courseId }) 
-    }),
-    generateLesson: (topic, level = 'beginner') => apiRequest('/ai/generate-lesson', {
-        method: 'POST',
-        body: JSON.stringify({ topic, level })
-    })
+    async getExplanation(questionId, userAnswer) {
+        return apiRequest('/ai/explain', {
+            method: 'POST',
+            body: JSON.stringify({
+                question_id: questionId,
+                user_answer: userAnswer
+            })
+        });
+    }
 };
 
 // Admin API
 const adminAPI = {
-    getUsers: () => apiRequest('/admin/users'),
+    async getUsers() {
+        return apiRequest('/admin/users');
+    },
     
-    deactivateUser: (userId) => apiRequest(`/admin/users/${userId}/deactivate`, {
-        method: 'POST'
-    }),
+    async updateUser(userId, updates) {
+        return apiRequest(`/admin/users/${userId}`, {
+            method: 'PUT',
+            body: JSON.stringify(updates)
+        });
+    },
     
-    activateUser: (userId) => apiRequest(`/admin/users/${userId}/activate`, {
-        method: 'POST'
-    }),
+    async deleteUser(userId) {
+        return apiRequest(`/admin/users/${userId}`, {
+            method: 'DELETE'
+        });
+    },
     
-    deleteUser: (userId) => apiRequest(`/admin/users/${userId}`, {
-        method: 'DELETE'
-    }),
+    async createCourse(courseData) {
+        return apiRequest('/admin/courses', {
+            method: 'POST',
+            body: JSON.stringify(courseData)
+        });
+    },
     
-    updateUser: (userId, data) => apiRequest(`/admin/users/${userId}`, {
-        method: 'PUT',
-        body: JSON.stringify(data)
-    }),
+    async updateCourse(courseId, updates) {
+        return apiRequest(`/admin/courses/${courseId}`, {
+            method: 'PUT',
+            body: JSON.stringify(updates)
+        });
+    },
     
-    createCourse: (courseData) => apiRequest('/admin/courses', {
-        method: 'POST',
-        body: JSON.stringify(courseData)
-    }),
+    async deleteCourse(courseId) {
+        return apiRequest(`/admin/courses/${courseId}`, {
+            method: 'DELETE'
+        });
+    },
     
-    updateCourse: (courseId, courseData) => apiRequest(`/admin/courses/${courseId}`, {
-        method: 'PUT',
-        body: JSON.stringify(courseData)
-    }),
+    async createLesson(lessonData) {
+        return apiRequest('/admin/lessons', {
+            method: 'POST',
+            body: JSON.stringify(lessonData)
+        });
+    },
     
-    deleteCourse: (courseId) => apiRequest(`/admin/courses/${courseId}`, {
-        method: 'DELETE'
-    }),
+    async updateLesson(lessonId, updates) {
+        return apiRequest(`/admin/lessons/${lessonId}`, {
+            method: 'PUT',
+            body: JSON.stringify(updates)
+        });
+    },
     
-    createLesson: (lessonData) => apiRequest('/admin/lessons', {
-        method: 'POST',
-        body: JSON.stringify(lessonData)
-    }),
+    async deleteLesson(lessonId) {
+        return apiRequest(`/admin/lessons/${lessonId}`, {
+            method: 'DELETE'
+        });
+    },
     
-    updateLesson: (lessonId, lessonData) => apiRequest(`/admin/lessons/${lessonId}`, {
-        method: 'PUT',
-        body: JSON.stringify(lessonData)
-    }),
-    
-    deleteLesson: (lessonId) => apiRequest(`/admin/lessons/${lessonId}`, {
-        method: 'DELETE'
-    }),
-    
-    createQuestion: (questionData) => apiRequest('/admin/questions', {
-        method: 'POST',
-        body: JSON.stringify(questionData)
-    }),
-    
-    updateQuestion: (questionId, questionData) => apiRequest(`/admin/questions/${questionId}`, {
-        method: 'PUT',
-        body: JSON.stringify(questionData)
-    }),
-    
-    deleteQuestion: (questionId) => apiRequest(`/admin/questions/${questionId}`, {
-        method: 'DELETE'
-    }),
-    
-    getStatistics: () => apiRequest('/admin/statistics')
+    async getStatistics() {
+        return apiRequest('/admin/statistics');
+    },
+
+    async sendNotification(notificationData) {
+        return apiRequest('/admin/notifications/send', {
+            method: 'POST',
+            body: JSON.stringify(notificationData)
+        });
+    }
 };
-
-// Admin AI-generated questions
-adminAPI.getGeneratedQuestions = (params = '') => apiRequest(`/ai/generated-questions${params ? '?' + params : ''}`);
-adminAPI.approveGeneratedQuestion = (id) => apiRequest(`/ai/generated-questions/${id}/approve`, { method: 'POST' });
-adminAPI.rejectGeneratedQuestion = (id) => apiRequest(`/ai/generated-questions/${id}/reject`, { method: 'POST' });
-adminAPI.updateQuestion = (id, data) => apiRequest(`/ai/generated-questions/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-
-// Logout function
-function logout() {
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('user_data');
-    window.location.href = '/';
-}
 
 // Notifications API
-adminAPI.sendNotification = (payload) => apiRequest('/admin/notifications/send', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-});
-
 const notificationsAPI = {
-    getAll: (unreadOnly = false) => apiRequest(`/notifications?unread=${unreadOnly}`),
-    markRead: (notificationId) => apiRequest(`/notifications/${notificationId}/read`, {
-        method: 'POST'
-    })
+    async getMyNotifications(unreadOnly = false) {
+        const query = unreadOnly ? '?unread=true' : '';
+        return apiRequest(`/admin/notifications${query}`);
+    },
+    
+    async markRead(notificationId) {
+        return apiRequest(`/notifications/${notificationId}/read`, {
+            method: 'POST'
+        });
+    }
 };
 
-const notificationsAPI_old = {
-    getMyNotifications: (unreadOnly = false) => apiRequest(`/admin/notifications?unread=${unreadOnly}`)
-};
+// Utility functions
+function logout() {
+    removeToken();
+    redirectTo('../index.html');
+}
 
-// Assignments API
-const assignmentsAPI = {
-    getForLesson: (lessonId) => apiRequest(`/assignments/lesson/${lessonId}`),
-    submit: (assignmentId, submissionContent, fileUrl) => apiRequest('/assignments/submit', {
-        method: 'POST',
-        body: JSON.stringify({
-            assignment_id: assignmentId,
-            submission_content: submissionContent,
-            file_url: fileUrl
-        })
-    })
-};
+function redirectTo(path) {
+    window.location.href = path;
+}
 
+function showAlert(message, type = 'info') {
+    // Create alert element
+    const alert = document.createElement('div');
+    alert.className = `alert alert-${type}`;
+    alert.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 15px 20px;
+        background: ${type === 'error' ? '#dc2626' : type === 'success' ? '#16a34a' : '#2563eb'};
+        color: white;
+        border-radius: 5px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        z-index: 10000;
+        max-width: 400px;
+        animation: slideIn 0.3s ease;
+    `;
+    alert.textContent = message;
+    
+    document.body.appendChild(alert);
+    
+    setTimeout(() => {
+        alert.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => alert.remove(), 300);
+    }, 3000);
+}
+
+function formatDate(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('vi-VN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+// Add CSS animations
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideOut {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    }
+`;
+document.head.appendChild(style);

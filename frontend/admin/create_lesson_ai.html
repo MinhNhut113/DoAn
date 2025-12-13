@@ -89,7 +89,22 @@
 
     <script src="../js/api.js"></script>
     <script>
-        if (!isAuthenticated()) redirectTo('../index.html');
+        async function checkAdminAccess() {
+            if (!isAuthenticated()) {
+                redirectTo('../index.html');
+                return;
+            }
+            
+            const user = await getCurrentUser();
+            if (!user || user.role !== 'admin') {
+                showAlert('Bạn không có quyền truy cập trang này. Chỉ dành cho Admin.', 'error');
+                redirectTo('../index.html');
+                return;
+            }
+        }
+        
+        // Check admin access first
+        checkAdminAccess();
 
         let allCourses = [];
 

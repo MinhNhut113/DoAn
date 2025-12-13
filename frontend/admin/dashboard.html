@@ -60,10 +60,23 @@
         console.log('[ADMIN] Checking authentication...');
         console.log('[ADMIN] Auth Token:', localStorage.getItem('auth_token') ? 'Present' : 'Missing');
         
-        if (!isAuthenticated()) {
-            console.log('[ADMIN] Not authenticated, redirecting to login');
-            redirectTo('../index.html');
+        async function checkAdminAccess() {
+            if (!isAuthenticated()) {
+                console.log('[ADMIN] Not authenticated, redirecting to login');
+                redirectTo('../index.html');
+                return;
+            }
+            
+            const user = await getCurrentUser();
+            if (!user || user.role !== 'admin') {
+                showAlert('Bạn không có quyền truy cập trang này. Chỉ dành cho Admin.', 'error');
+                redirectTo('../index.html');
+                return;
+            }
         }
+        
+        // Check admin access first
+        checkAdminAccess();
         
         async function loadStatistics() {
             try {

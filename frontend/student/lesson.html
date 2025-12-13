@@ -72,6 +72,16 @@
                 renderLesson(assignmentData);
             } catch (error) {
                 console.error('Lỗi chi tiết:', error);
+                
+                if (error.message.includes('Not enrolled in this course')) {
+                    showAlert('Bạn chưa đăng ký khóa học này. Vui lòng đăng ký trước khi xem bài học.', 'error');
+                    // Redirect to courses page after a delay
+                    setTimeout(() => {
+                        window.location.href = 'courses.html';
+                    }, 3000);
+                    return;
+                }
+                
                 showAlert('Lỗi tải bài học: ' + error.message, 'error');
                 document.getElementById('lessonContent').innerHTML = `<p style="color: red;">Lỗi tải bài học: ${error.message}</p>`;
             }

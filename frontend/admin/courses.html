@@ -122,9 +122,22 @@
     <script>
         let editingCourseId = null;
         
-        if (!isAuthenticated()) {
-            redirectTo('../index.html');
+        async function checkAdminAccess() {
+            if (!isAuthenticated()) {
+                redirectTo('../index.html');
+                return;
+            }
+            
+            const user = await getCurrentUser();
+            if (!user || user.role !== 'admin') {
+                showAlert('Bạn không có quyền truy cập trang này. Chỉ dành cho Admin.', 'error');
+                redirectTo('../index.html');
+                return;
+            }
         }
+        
+        // Check admin access first
+        checkAdminAccess();
         
         // Nếu URL có query param id, lưu lại để mở modal khi load xong
         const openCourseIdFromQuery = new URLSearchParams(window.location.search).get('id');

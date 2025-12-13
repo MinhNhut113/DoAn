@@ -63,7 +63,7 @@ def submit_quiz(quiz_id):
             return jsonify({'error': 'Quiz not found'}), 404
         
         data = request.get_json()
-        answers = data.get('answers', [])  # [{question_id: 1, selected_answer: 2}, ...]
+        answers = data.get('answers', [])
         time_taken_minutes = data.get('time_taken_minutes', 0)
         
         # Get questions
@@ -106,7 +106,17 @@ def submit_quiz(quiz_id):
             # Generate AI explanation for wrong answers
             if not is_correct and ai_service:
                 try:
-                    options = json.loads(question.options or '[]') if isinstance(question.options, str) else (question.options or [])
+                    # FIX: Better options parsing to prevent crashes
+                    if isinstance(question.options, str):
+                        options = json.loads(question.options)
+                    elif isinstance(question.options, list):
+                        options = question.options
+                    else:
+                        options = []
+                except:
+                    options = []
+                
+                try:
                     user_answer_text = options[selected_answer] if isinstance(selected_answer, int) and selected_answer < len(options) else 'Không rõ'
                     correct_answer_text = options[question.correct_answer] if isinstance(question.correct_answer, int) and question.correct_answer < len(options) else 'Không rõ'
                     
@@ -204,4 +214,3 @@ def get_questions():
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
