@@ -71,8 +71,8 @@ class Lesson(db.Model):
     
     lesson_id = db.Column(db.Integer, primary_key=True)
     course_id = db.Column(db.Integer, db.ForeignKey('courses.course_id'), nullable=False)
-    lesson_title = db.Column(db.String(200), nullable=False)
-    lesson_content = db.Column(db.Text)
+    lesson_title = db.Column(db.Unicode(200), nullable=False)
+    lesson_content = db.Column(db.UnicodeText)
     lesson_order = db.Column(db.Integer, nullable=False)
     video_url = db.Column(db.String(500))
     duration_minutes = db.Column(db.Integer)
@@ -131,14 +131,14 @@ class QuizQuestion(db.Model):
     question_id = db.Column(db.Integer, primary_key=True)
     topic_id = db.Column(db.Integer, db.ForeignKey('topics.topic_id'))
     course_id = db.Column(db.Integer, db.ForeignKey('courses.course_id'))
-    question_text = db.Column(db.Text, nullable=False)
+    question_text = db.Column(db.UnicodeText, nullable=False)
     question_type = db.Column(db.String(20), default='multiple_choice')
-    options = db.Column(db.Text)  # JSON string
+    options = db.Column(db.UnicodeText)  # JSON string
     correct_answer = db.Column(db.Integer, nullable=False)
-    explanation = db.Column(db.Text)
+    explanation = db.Column(db.UnicodeText)
     difficulty_level = db.Column(db.Integer, default=1)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
     def to_dict(self, include_answer=False):
         data = {
             'question_id': self.question_id,
