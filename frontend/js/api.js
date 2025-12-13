@@ -2,16 +2,17 @@
 const API_BASE_URL = 'http://localhost:5000/api';
 
 // Token management
+// frontend/js/api.js - Dòng 5-15
 function getToken() {
-    return localStorage.getItem('token');
+    return localStorage.getItem('auth_token');  
 }
 
 function setToken(token) {
-    localStorage.setItem('token', token);
+    localStorage.setItem('auth_token', token);  
 }
 
 function removeToken() {
-    localStorage.removeItem('token');
+    localStorage.removeItem('auth_token');  
 }
 
 function isAuthenticated() {

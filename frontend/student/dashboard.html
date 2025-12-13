@@ -434,8 +434,12 @@
         // Load notifications when page loads
         loadNotifications();
         // Refresh every 30 seconds
-        setInterval(loadNotifications, 30000);
-
+        notifRefreshInterval = setInterval(loadNotifications, 30000);
+        window.addEventListener('beforeunload', () => {
+            if (notifRefreshInterval) {
+                clearInterval(notifRefreshInterval);
+            }
+        });
         // ========== Learning Goal Functions ==========
         function displayLearningGoal(goal) {
             const goalText = document.getElementById('goalText');
